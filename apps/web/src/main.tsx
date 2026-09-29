@@ -90,7 +90,7 @@ function Aplicacao() {
           podeVerFila={pode?.viewQueue ?? false}
           podeGerirServidores={pode?.manageServerAccess ?? false}
           podeVerDashboard={pode?.viewDashboard ?? false}
-          homeHref="#/fila"
+          homeHref={pode?.viewQueue ? '#/fila' : pode?.viewDashboard ? '#/dashboard' : '#/configuracoes'}
           sair={sair}
         />
         <main className="conteudo" id="conteudo"><AreaOperacao rota={rota} /></main>

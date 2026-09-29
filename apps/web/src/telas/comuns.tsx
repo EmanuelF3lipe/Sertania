@@ -53,7 +53,12 @@ export function Cabecalho({
             </nav>
           )}
         </div>
-        <button className="secundario" onClick={() => void sair()}>
+        <button
+          className="secundario"
+          onClick={() => {
+            if (window.confirm('Deseja realmente sair da plataforma?')) void sair();
+          }}
+        >
           Sair
         </button>
       </div>
