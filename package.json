@@ -10,16 +10,28 @@
     "build": "pnpm -r --filter \"./packages/**\" build && pnpm -r --filter \"./apps/**\" build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
-    "test:unit": "pnpm -r --filter \"./packages/**\" test",
+
+    "test": "pnpm test:unit",
+    "test:unit": "pnpm -r --filter \"./packages/**\" test && pnpm --filter @sertania/api test:unit",
+    "test:integration": "pnpm --filter @sertania/api test:integration",
+    "test:e2e": "pnpm --filter @sertania/api test:integration",
+
+    "verify": "pnpm typecheck && pnpm lint && pnpm build && pnpm test:unit",
+    "verify:full": "pnpm verify && pnpm test:integration",
+
     "dev": "pnpm -r --parallel dev",
+
     "db:up": "docker compose -f infra/docker/docker-compose.yml --env-file .env up -d",
     "db:down": "docker compose -f infra/docker/docker-compose.yml --env-file .env down",
     "db:logs": "docker compose -f infra/docker/docker-compose.yml --env-file .env logs -f",
+    "db:ps": "docker compose -f infra/docker/docker-compose.yml --env-file .env ps",
+    "db:reset": "docker compose -f infra/docker/docker-compose.yml --env-file .env down -v",
     "db:migrate": "pnpm --filter @sertania/api db:migrate",
     "db:revert": "pnpm --filter @sertania/api db:revert",
     "db:seed": "pnpm --filter @sertania/api db:seed",
-    "verify": "pnpm typecheck && pnpm lint && pnpm test",
+    "db:psql": "docker compose -f infra/docker/docker-compose.yml --env-file .env exec postgres psql -U sertania_app -d sertania",
+    "db:psql:migrator": "docker compose -f infra/docker/docker-compose.yml --env-file .env exec postgres psql -U sertania_migrator -d sertania",
+
     "audit:deps": "pnpm audit --prod"
   },
   "devDependencies": {

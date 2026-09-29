@@ -3,10 +3,17 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: '.',
-  testMatch: ['<rootDir>/test/**/*.test.ts', '<rootDir>/test/**/*.spec.ts'],
+  // APENAS unitarios. Testes que tocam infraestrutura ficam em
+  // `jest-integration.config.js`, porque exigem Postgres e Redis no ar.
+  //
+  // A separacao e explicita, e nao por convencao de nome, para que uma suite
+  // obrigatoria nunca fique verde por nao encontrar teste nenhum.
+  testMatch: ['<rootDir>/test/**/*.test.ts', '<rootDir>/test/**/*.unit.test.ts'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/test/integration/',
+  ],
   moduleFileExtensions: ['ts', 'js', 'json'],
-  // O codigo de dominio e TypeScript puro; o log do ts-jest fica noisivel sem
-  // necessidade e mascara a saida real dos testes.
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.json', diagnostics: { warnOnly: false } }],
   },

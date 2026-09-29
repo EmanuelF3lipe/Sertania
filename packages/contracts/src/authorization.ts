@@ -30,6 +30,14 @@ export interface Membership {
   readonly secretariatId: string;
   /** Vazio significa "todas as unidades desta secretaria", conforme o vinculo. */
   readonly unitIds: readonly string[];
+  /**
+   * Equipes habilitadas neste vinculo.
+   *
+   * Vazio significa "nenhuma equipe especifica", o que NAO equivale a "todas".
+   * Em Saude, conteudo restrito exige equipe habilitada, e um vinculo sem
+   * equipe nao a habilita automaticamente (secao 4).
+   */
+  readonly teamIds: readonly string[];
   readonly active: boolean;
   readonly startsAt: Date;
   readonly expiresAt: Date | null;
@@ -78,19 +86,24 @@ export interface AuthorizationSubject {
 /**
  * Alvo da operacao. Descreve o recurso sem carregar conteudo: a politica nao
  * deve precisar ler descricao, nome ou documento para decidir acesso.
+ *
+ * Todo campo opcional aceita `undefined` explicito. Com
+ * `exactOptionalPropertyTypes` ligado, a forma `campo?: string` recusaria
+ * `campo: undefined`, e o preenchimento a partir do banco, onde a coluna pode
+ * ser nula, quebraria o compilador em vez do tipo.
  */
 export interface AuthorizationTarget {
-  readonly requestId?: string;
+  readonly requestId?: string | undefined;
   /** Cidadao dono da solicitacao. */
-  readonly ownerCitizenId?: string;
+  readonly ownerCitizenId?: string | undefined;
   /** Servidor atualmente atribuido. */
-  readonly assigneeUserId?: string;
-  readonly secretariatId?: string;
-  readonly unitId?: string;
-  readonly classification?: InformationClassification;
-  readonly state?: RequestState;
+  readonly assigneeUserId?: string | undefined;
+  readonly secretariatId?: string | undefined;
+  readonly unitId?: string | undefined;
+  readonly classification?: InformationClassification | undefined;
+  readonly state?: RequestState | undefined;
   /** Quando o cidadao pode representar alguem neste recurso. */
-  readonly representationValid?: boolean;
+  readonly representationValid?: boolean | undefined;
 }
 
 /** Matriz de permissao por perfil (secao 4). */
