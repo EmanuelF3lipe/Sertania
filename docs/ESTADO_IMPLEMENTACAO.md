@@ -30,6 +30,51 @@ navegador**, com uma ressalva importante na tabela abaixo.
 
 Gates: `pnpm lint` 0 problemas, `pnpm typecheck` 0 erros, `pnpm build` sem erro.
 
+## Banco de dados dedicado para os testes
+
+Os testes de integracao rodavam contra o mesmo banco das demonstracoes locais e
+apagavam o conteudo. Isso nao era risco teorico: ao verificar o problema, a
+identidade do cidadao criada pelo login no navegador **nao existia mais**, e o
+banco de trabalho tinha dois usuarios de teste residuais.
+
+Resolvido na raiz, com tres pecas:
+
+| Peca | Onde | O que faz |
+| --- | --- | --- |
+| provisionamento idempotente | `infra/docker/postgres/provisionar.mjs` | cria `sertania_test`, os papeis `sertania_test_migrator` e `sertania_test_app`, e as extensoes. Tem `--verificar` |
+| configuracao propria | `.env.test`, a partir de `.env.test.example` | banco e credenciais do ambiente de teste, com prefixo `TEST_` para nao confundir com o `.env` |
+| barreira no carregamento | `apps/api/test/support/carregar-env.ts` | recusa com erro explicito antes de abrir conexao |
+
+**Evidencia de que a barreira funciona**, e nao so de que existe:
+
+- `.env.test` apontado para o banco de trabalho: `exit=1`, mensagem dizendo que
+  os testes apagam o banco, e **nenhuma conexao aberta**.
+- `.env.test` removido: `exit=1` com a instrucao de copiar o exemplo.
+- Execucao normal: 40 testes passando, banco de trabalho com as mesmas contagens
+  antes e depois, e o banco de teste com as 36 tabelas da migration.
+
+Os papeis de teste foram criados **sem nenhum privilegio**: `\du` mostra
+`sertania_test_app` e `sertania_test_migrator` com a coluna de atributos vazia,
+contra `sertania_app`, que tem `Superuser, Create role, Create DB, Replication,
+Bypass RLS`.
+
+### `pendencia-conta-superusuario`
+
+Ao provisionar o banco de teste, o `\du` revelou que **`sertania_app` e
+SUPERUSUARIO**, e o `.env` e o `docker-compose.yml` afirmavam o contrario em
+comentarios. A causa: a imagem do Postgres cria `POSTGRES_USER` como superusuario
+no bootstrap, e nao ha script que reduza o privilegio depois.
+
+Os tres comentarios foram corrigidos para dizer a verdade, mas a conta continua
+superusuario. Nao foi reduzida aqui porque a conta e dona das tabelas do banco de
+trabalho: tira-lhe superusuario e `CREATEDB` exige conceder `USAGE`, `SELECT`,
+`INSERT`, `UPDATE` e `DELETE` nas 31 tabelas e nas sequencias, e essa concessao
+precisa ser verificada contra a aplicacao em execucao antes de trocar. O banco de
+teste ja serve de referencia: e exatamente a estrutura de concessoes que o banco
+de trabalho precisa receber.
+
+**Nao se pode afirmar que a aplicacao roda sem superusuario.** Ela roda com ele.
+
 ## Marco B - Login real com Keycloak
 
 ### O que foi verificado no navegador, de verdade
@@ -280,11 +325,10 @@ dois que produziu o `state` indefinido descrito adiante.
   TOTP do Keycloak 26.4 responde erro interno, entao nao da para configurar o
   segundo fator sem um aplicativo autenticador de verdade. A regra esta
   testada; o caminho completo nao foi executado.
-- **Banco de dados dedicado para os testes de integracao.** Hoje eles usam o
-  mesmo banco `sertania` das demonstracoes locais e apagam o conteudo. Um
-  `pnpm test:integration` destroyindo os dados de quem esta desenvolvendo a
-  interface e um risco operacional real. O documento exige banco dedicado, e
-  isto ainda nao foi feito.
+- **Reduzir o privilegio de `sertania_app`.** A conta de trabalho e
+  SUPERUSUARIO, contrariando o que o compose e o `.env` afirmavam. Os
+  comentarios foram corrigidos; a conta ainda nao. Ver
+  `pendencia-conta-superusuario`.
 - **Upload e download de anexos pelo endpoint.** Politica e cliente de
   antivirus existem e estao testados; nao ha controller nem fluxo de
   quarentena ate liberacao.

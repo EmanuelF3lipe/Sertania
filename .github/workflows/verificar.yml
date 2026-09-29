@@ -74,6 +74,7 @@ jobs:
       - name: Subir a stack local
         run: |
           cp .env.example .env
+          cp .env.test.example .env.test
           docker compose -f infra/docker/docker-compose.yml --env-file .env up -d \
             postgres redis-session redis-queue rustfs
           # Espera o Postgres aceitar conexao, em vez de dormir por tempo fixo.
@@ -87,16 +88,32 @@ jobs:
           done
           docker compose -f infra/docker/docker-compose.yml --env-file .env ps
 
-      - name: Aplicar migrations
-        run: pnpm db:migrate
-        env:
-          POSTGRES_USER: sertania_app
-          POSTGRES_PASSWORD: app-local-apenas
-          POSTGRES_MIGRATOR_USER: sertania_migrator
-          POSTGRES_MIGRATOR_PASSWORD: migrator-local-apenas
+      # O banco de teste e separado do banco de trabalho, e os testes de
+      # integracao rodam APENAS no de teste. Sem esta etapa os testes usariam o
+      # banco das demonstracoes, que e justamente o que a separacao impede.
+      - name: Provisionar o banco de teste
+        run: pnpm db:test:provision
+
+      - name: Aplicar migrations no banco de teste
+        run: pnpm --filter @sertania/api db:test:migrate
 
       - name: Testes de integracao
         run: pnpm test:integration
+
+      - name: Conferir que o banco de trabalho nao foi tocado
+        run: |
+          # Evidencia de que a separacao valeu: o banco de trabalho precisa
+          # seguir vazio depois de todos os testes. Sem esta checagem, uma
+          # configuracao errada passaria despercebida, com os testes verdes e o
+          # banco de demonstracao destruido.
+          TOTAL=$(docker compose -f infra/docker/docker-compose.yml --env-file .env \
+            exec -T postgres psql -U sertania_migrator -d sertania -tAc \
+            'select count(*) from users;')
+          echo "usuarios no banco de trabalho: $TOTAL"
+          if [ "$TOTAL" != "0" ]; then
+            echo "::error::os testes de integracao escreveram no banco de trabalho"
+            exit 1
+          fi
 
       - name: Registros da execucao
         if: always()

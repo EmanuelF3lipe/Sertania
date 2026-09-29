@@ -6,5 +6,8 @@
     "rootDir": "./src",
     "noEmit": false
   },
-  "exclude": ["node_modules", "test", "dist", "**/*.spec.ts"]
+  // `scripts/` entra no typecheck e no lint, mas nao no build: os scripts sao
+  // executados por `tsx` e nao precisam sair em `dist`. Sem este `exclude`, o
+  // `rootDir: ./src` abaixo brigaria com eles, porque eles estao fora de `src`.
+  "exclude": ["node_modules", "test", "scripts", "dist", "**/*.spec.ts"]
 }

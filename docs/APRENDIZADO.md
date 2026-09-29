@@ -300,7 +300,117 @@ evento`) eram a prova de que nao havia bug.
 
 ---
 
-## 14. Verificar e uma atividade, nao um detalhe
+## 14. Comentario que afirma o contrario do que o codigo faz
+
+**Sintoma.** Ao provisionar o banco de teste, o `\du` mostrou:
+
+```
+sertania_app  Superuser, Create role, Create DB, Replication, Bypass RLS
+```
+
+O `.env` e o `docker-compose.yml` diziam, com todas as letras:
+
+> `app` roda com synchronize:false, **sem superusuario** e sem ALTER.
+
+**O que era.** A imagem do Postgres cria `POSTGRES_USER` como superusuario no
+bootstrap do cluster. Nada depois disso reduz o privilegio. A configuracao nao
+fazia o que o comentario dizia.
+
+**Aprendizado.** Um comentario que descreve uma propriedade de seguranca e uma
+**afirmacao verificavel**, e por isso mesmo a que mais precisa de conferencia. Nao
+verifiquei porque o texto estava ali e parecia description, nao codigo.
+
+Duas coisas a fazer quando se encontra um comentario assim: corrigir o comentario
+imediatamente, mesmo que a situacao ainda nao esteja resolvida (um comentario
+errado e pior que nenhum, porque desvia quem procura depois), e registrar a
+pendencia com nome proprio.
+
+O detalhe que e facil perder: **corrigir o comentario nao corrige o problema**.
+Um arquivo que passou a dizer a verdade sobre um superusuario continua sendo um
+arquivo com um superusuario. Por isso a pendencia ficou nomeada e listada, e nao
+apenas anotada no comentario.
+
+Vale notar como isso foi encontrado: nao por revisao, e por `\`du\`, um comando
+que ninguem pensou em rodar porque o problema nao era o banco de teste. Ver o
+proximo item.
+
+---
+
+## 15. Ferramenta de linha de comando antes de procurar no codigo
+
+**O que aconteceu.** A tarefa era criar um banco de teste. O caminho obvio era
+escrever o script, rodar os testes e seguir. Rodei `\du` por curiosidade, para
+conferir os papeis que o script tinha criado.
+
+Apareceu o superusuario acima, que nao tinha nada a ver com a tarefa.
+
+**Aprendizado.** Quando um comando de verificacao devolve um estado, ele nao
+responde so a pergunta que voce fez. `\du` perguntava "os papeis de teste existem?",
+e respondeu tambem "a conta de trabalho tem privilegios que ninguem pediu".
+
+O habito que ajuda: depois de qualquer comando que mostre estado, le a saida
+inteira, e nao so a linha que voce esperava. Saida de ferramenta e barata;
+o que e caro e a proxima hora de alguem descobrir a mesma coisa.
+
+---
+
+## 16. Guarda de seguranca escrita ao contrario
+
+**Sintoma.** Escrevi a primeira versao da checagem assim:
+
+```ts
+if (process.env['POSTGRES_DB'] === bancoDoTeste) {
+  throw new Error('cada ambiente precisa do seu proprio banco');
+}
+```
+
+O script recusou rodar com a mensagem "POSTGRES_DB e TEST_POSTGRES_DB apontam
+para o mesmo banco", sendo que os dois valores **precisam** ser iguais: e assim
+que `.env.test` aponta o processo para o banco de teste.
+
+**O que a guarda deveria dizer.** O perigo nao e "os dois nomes sao iguais". O
+perigo e o `.env.test` faltar, o `.env` vencer, e sobrar o banco de
+demonstracao. Entao a checagem correta e: o banco em uso tem de ser o banco de
+teste, e o banco de teste tem de ser diferente do banco de trabalho. Sao duas
+condicoes, e as duas vao na mesma direcao.
+
+**Aprendizado.** Ao inverter a condicao de uma checagem, a falha aparece rapido e
+aparece com a mensagem, que e a melhor forma de ela aparecer. Se a guarda
+recusasse um estado legitimo, ela estaria valendo.
+
+E o cuidado maior: uma guarda invertida que so falha em condicao errada passa
+despercebida em todos os testes, porque o cenario legitimo nao acontece com
+frequencia. Aqui apareceu porque o script foi rodado de verdade, e nao olhando o
+codigo.
+
+---
+
+## 17. `CREATE ROLE` nao aceita parametro ligado
+
+**Sintoma.** `there is no parameter $1` no provisionamento, com uma mensagem
+que aponta para a sentenca e nao para a forgottenca de um `await`.
+
+**O que era.** Duas causas, uma atras da outra:
+
+1. `CREATE ROLE "x" LOGIN PASSWORD $1` - a senha precisa ser literal. E
+   `COMMENT ON ROLE "x" IS $1` tambem.
+2. O helper `consulta(sql)` aceitava so a sentenca e descartava o array de
+   parametros, entao ate a consulta que usava `$1` corretamente falhava.
+
+**Aprendizado.** A segunda e a mais instrutiva: um helper com assinatura
+`(sql)` chamado de `consulta(sql, valores)` funciona para consultas sem
+parametro e falha misteriosamente nas com parametro. A mensagem de erro
+("no parameter $1") sugere problema na sentenca, quando o problema era um
+argumento que nao chegava.
+
+Quando a mensagem de erro aponta para um lugar, desconfie tambem do caminho que
+levou ate la. E `escapeLiteral` do driver resolve o caso do literal sem
+introduzir concatenacao de senha em SQL, que e o jeito classico de injetar
+codigo num script "que so roda local".
+
+---
+
+## 18. Verificar e uma atividade, nao um detalhe
 
 Ao longo do Marco B, varias vezes a resposta a um erro foi rodar o
 `--verificar` do provisionamento, ou abrir o navegador, antes de mexer no

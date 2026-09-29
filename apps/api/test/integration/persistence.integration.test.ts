@@ -8,30 +8,15 @@
  * Requisitos: a stack de `infra/docker/docker-compose.yml` no ar.
  */
 import { DataSource } from 'typeorm';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from '@jest/globals';
 import { PROTOCOL_SEQUENCE_TABLE, VersionConflictError } from '@sertania/contracts';
 import { OpenRequestService } from '../../src/requests/open-request.service';
 import { ProtocolService } from '../../src/requests/protocol.service';
 import { WorkflowService } from '../../src/requests/workflow.service';
+import { carregarAmbienteDeTeste } from '../support/carregar-env';
 
-/** Le o `.env` da raiz, que a CLI de teste nao carrega sozinha. */
-function loadEnv(): void {
-  const raw = readFileSync(resolve(__dirname, '../../../../.env'), 'utf8');
-  for (const line of raw.split(/\r?\n/)) {
-    if (line.trim() === '' || line.startsWith('#')) continue;
-    const separator = line.indexOf('=');
-    if (separator === -1) continue;
-    const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1);
-    if (value !== '' && process.env[key] === undefined) {
-      process.env[key] = value;
-    }
-  }
-}
-
-loadEnv();
+// Recusa o banco de demonstracao antes de abrir qualquer conexao. Ver o modulo.
+carregarAmbienteDeTeste();
 
 const NOW = new Date('2026-09-28T12:00:00.000Z');
 

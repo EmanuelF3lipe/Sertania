@@ -92,6 +92,21 @@ export default tseslint.config(
     },
   },
 
+  // Scripts de linha de comando: `console` e a interface CORRETA deles.
+  //
+  // A regra `no-console` existe para o codigo da aplicacao, onde log passa pelo
+  // NestJS Logger e um `console.log` esquecido vaza dado em producao. Um script
+  // executado no terminal nao tem Logger, nao tem nivel de log e nao tem
+  // consumidor de log: a saida dele E o terminal.
+  //
+  // As demais regras continuam valendo. O que se liga aqui e apenas o console.
+  {
+    files: ['**/scripts/**/*.ts', '**/scripts/**/*.mjs'],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+
   // O flat config vem antes do Prettier: ele desliga as regras de formatacao
   // que o Prettier cuida, evitando conflito entre as duas ferramentas.
   prettier,

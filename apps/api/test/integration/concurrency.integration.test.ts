@@ -11,8 +11,6 @@
  * producao, e foi o que aconteceu com `MAX + 1` no protocolo.
  */
 import { DataSource } from 'typeorm';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from '@jest/globals';
 import { Logger } from '@nestjs/common';
 import { VersionConflictError } from '@sertania/contracts';
@@ -20,19 +18,10 @@ import { OpenRequestService } from '../../src/requests/open-request.service';
 import { ProtocolService } from '../../src/requests/protocol.service';
 import { WorkflowService } from '../../src/requests/workflow.service';
 import { Database } from '../../src/database/typed-query';
+import { carregarAmbienteDeTeste } from '../support/carregar-env';
 
-function loadEnv(): void {
-  const raw = readFileSync(resolve(__dirname, '../../../../.env'), 'utf8');
-  for (const line of raw.split(/\r?\n/)) {
-    if (line.trim() === '' || line.startsWith('#')) continue;
-    const i = line.indexOf('=');
-    if (i === -1) continue;
-    const k = line.slice(0, i).trim();
-    const v = line.slice(i + 1);
-    if (v !== '' && process.env[k] === undefined) process.env[k] = v;
-  }
-}
-loadEnv();
+// Recusa o banco de demonstracao antes de abrir qualquer conexao. Ver o modulo.
+carregarAmbienteDeTeste();
 
 const NOW = new Date('2026-09-29T12:00:00.000Z');
 

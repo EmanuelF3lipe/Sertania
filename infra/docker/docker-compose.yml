@@ -44,8 +44,14 @@ services:
     <<: [*logging, *restart]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-sertania}
-      # A conta da aplicacao e criada aqui sem privilegio de superusuario.
-      # Migrações usam conta separada, conforme a secao 11.
+      # A conta da aplicacao e criada aqui pelo bootstrap da imagem do Postgres,
+      # que a torna SUPERUSUARIA. Este comentario antes dizia o contrario, e a
+      # afirmacao estava errada: nada no compose reduz o privilegio depois.
+      # Ver `pendencia-conta-superusuario` em `docs/ESTADO_IMPLEMENTACAO.md`.
+      #
+      # Migracoes do banco de TRABALHO usam conta separada (POSTGRES_MIGRATOR_*),
+      # conforme a secao 11. O banco de TESTE tem contas proprias e com menos
+      # privilegio ainda, criadas por `infra/docker/postgres/provisionar.mjs`.
       POSTGRES_USER: ${POSTGRES_USER:-sertania_app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app-local-apenas}
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
