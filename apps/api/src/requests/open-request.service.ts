@@ -103,20 +103,43 @@ export class OpenRequestService {
       // o compilador continue protegendo o codigo depois do banco.
       const tx = new Transaction(manager);
 
-      // 1. Chave de idempotencia. A busca e feita dentro da transacao para
-      //    que uma retentativa concorrente veja o registro.
+      // 1. Chave de idempotencia.
+      //
+      //    A reserva acontece ANTES de qualquer leitura, e de forma atomica.
+      //    A versao anterior consultava com `SELECT ... FOR UPDATE` e so
+      //    depois gravava: `FOR UPDATE` nao trava nada quando a linha AINDA
+      //    NAO EXISTE, entao N envios simultaneos com a mesma chave passavam
+      //    todos pela consulta vazia e criavam N pedidos. O teste de
+      //    concorrencia pegou isso: 8 envios produziram 7 pedidos.
+      //
+      //    `ON CONFLICT DO NOTHING` faz o banco decidir quem cria a linha. O
+      //    perdedor recebe `false` e pode entao ler a linha ja reservada.
       if (idempotencyKey !== undefined) {
-        const existing = await tx.run(
-          `SELECT "key", "request_hash", "result_entity_id", "expires_at"
-             FROM "idempotency_keys"
-            WHERE "user_id" = $1 AND "operation" = $2 AND "key" = $3
-            FOR UPDATE`,
-          [input.citizenId, operation, idempotencyKey],
+        const reserva = await tx.run(
+          `INSERT INTO "idempotency_keys"
+             ("user_id","operation","key","request_hash","expires_at","created_at")
+           VALUES ($1,$2,$3,$4,$5, now())
+           ON CONFLICT ("user_id","operation","key") DO NOTHING
+           RETURNING "key"`,
+          [input.citizenId, operation, idempotencyKey, requestHash, idempotencyExpiry(now)],
         );
 
-        if (existing.length > 0) {
+        if (reserva.length === 0) {
+          // A chave ja existia. `SELECT ... FOR UPDATE` agora segura a linha
+          // de verdade, porque ela existe.
+          const existing = await tx.run(
+            `SELECT "key", "request_hash", "result_entity_id", "expires_at"
+               FROM "idempotency_keys"
+              WHERE "user_id" = $1 AND "operation" = $2 AND "key" = $3
+              FOR UPDATE`,
+            [input.citizenId, operation, idempotencyKey],
+          );
+
           const row = existing[0];
-          if (row === undefined) throw new Error('Chave de idempotencia sem linha');
+          if (row === undefined) {
+            throw new Error('Reserva de idempotencia falhou sem linha de conflito');
+          }
+
           const classification = classifyIdempotencyLookup({
             found: true,
             storedHash: row['request_hash'] as string,
@@ -149,21 +172,21 @@ export class OpenRequestService {
               };
             }
           }
-          // NEW com chave existente significa chave expirada: seguimos e
-          // sobrescrevemos a linha.
+          // NEW com chave existente significa chave expirada: a linha e
+          // reescrita abaixo, sob o lock que a leitura com `FOR UPDATE`
+          // acabou de obter.
+          const reescrita = await tx.run(
+            `UPDATE "idempotency_keys"
+                SET "request_hash" = $4, "result_entity_id" = NULL, "expires_at" = $5
+              WHERE "user_id" = $1 AND "operation" = $2 AND "key" = $3`,
+            [input.citizenId, operation, idempotencyKey, requestHash, idempotencyExpiry(now)],
+          );
+          if (reescrita.length === 0) {
+            throw new Error('Chave expirada nao pode ser reaproveitada');
+          }
         }
-
-        await tx.run(
-          `INSERT INTO "idempotency_keys"
-             ("user_id","operation","key","request_hash","expires_at","created_at")
-           VALUES ($1,$2,$3,$4,$5, now())
-           ON CONFLICT ("user_id","operation","key")
-           DO UPDATE SET
-             "request_hash" = EXCLUDED."request_hash",
-             "result_entity_id" = NULL,
-             "expires_at" = EXCLUDED."expires_at"`,
-          [input.citizenId, operation, idempotencyKey, requestHash, idempotencyExpiry(now)],
-        );
+        // Se a reserva foi feita acima, a linha ja existe com o hash certo e
+        // nao precisa de nenhuma escrita.
       }
 
       // 2. Protocolo, na mesma transacao do pedido.
