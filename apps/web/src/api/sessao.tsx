@@ -54,6 +54,23 @@ export function ProvedorSessao({ children }: { readonly children: ReactNode }) {
   }, [recarregar]);
 
   const sair = useCallback(async () => {
+    let logoutDoProvedor: string | null = null;
+    // O logout local encerra o cookie da aplicacao, mas o Keycloak mantem a
+    // sessao SSO. Buscar a URL antes de revogar a sessao garante que o proximo
+    // login realmente mostre a tela de credenciais novamente.
+    try {
+      const resposta = await fetch('/api/v1/auth/logout/provedor', {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (resposta.ok) {
+        const corpo = (await resposta.json()) as { url?: unknown };
+        logoutDoProvedor = typeof corpo.url === 'string' && corpo.url !== '' ? corpo.url : null;
+      }
+    } catch {
+      // O logout local continua sendo executado mesmo se o provedor estiver
+      // temporariamente indisponivel.
+    }
     try {
       await fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {
@@ -64,6 +81,11 @@ export function ProvedorSessao({ children }: { readonly children: ReactNode }) {
     definirSessao(null);
     definirFase('anonimo');
     limparCacheDeSessao();
+    if (logoutDoProvedor !== null) {
+      window.location.assign(logoutDoProvedor);
+    } else {
+      window.location.assign('/');
+    }
   }, []);
 
   const valor = useMemo<ContextoSessao>(
