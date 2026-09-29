@@ -47,6 +47,7 @@ const env = carregarEnv();
 const KEYCLOAK = process.env['KEYCLOAK_URL'] ?? env['KEYCLOAK_URL'] ?? 'http://localhost:8080';
 const ADMIN_USER = process.env['KEYCLOAK_ADMIN_USER'] ?? env['KEYCLOAK_ADMIN_USER'] ?? 'admin';
 const ADMIN_PASS = process.env['KEYCLOAK_ADMIN_PASSWORD'] ?? env['KEYCLOAK_ADMIN_PASSWORD'] ?? 'admin-local-apenas';
+const ADMIN_EMAIL = process.env['KEYCLOAK_ADMIN_EMAIL'] ?? env['KEYCLOAK_ADMIN_EMAIL'] ?? 'admin@exemplo.invalid';
 const CLIENT_ID = env['KEYCLOAK_CLIENT_ID'] ?? 'sertania-api';
 const CLIENT_SECRET = env['KEYCLOAK_CLIENT_SECRET'] ?? '';
 const REDIRECT_URI = env['KEYCLOAK_REDIRECT_URI'] ?? 'http://localhost:3000/api/v1/auth/callback';
@@ -247,14 +248,14 @@ const CONTAS = {
   ],
   'sertania-servidores': [
     {
-      entrada: 'servidor.saude',
+      entrada: 'servidor.saude@exemplo.invalid',
       senha: 'ServidorSaude!2026-demo',
       email: 'servidor.saude@exemplo.invalid',
       nome: 'Servidor',
       sobrenome: 'Saude',
     },
     {
-      entrada: 'servidor.infra',
+      entrada: 'servidor.infra@exemplo.invalid',
       senha: 'ServidorInfra!2026-demo',
       email: 'servidor.infra@exemplo.invalid',
       nome: 'Servidor',
@@ -286,6 +287,43 @@ async function limparBloqueio(admin, realm, userId, entrada) {
     registrar(`conta ${entrada}: bloqueio por tentativas removido`);
   } else if (resposta.status !== 404) {
     falhar(`conta ${entrada}: limpeza de bloqueio -> HTTP ${resposta.status}`);
+  }
+}
+
+/**
+ * Conta administrativa LOCAL usada pelo provisionamento.
+ *
+ * Ela pertence ao realm `master`, e nao e uma identidade municipal. O e-mail
+ * de demonstracao e `.invalid` e fica verificado para que o console local nao
+ * interrompa o acesso com uma tela de confirmacao de e-mail. Isso nao libera
+ * nenhum login institucional: os realms da aplicacao continuam separados e
+ * os servidores continuam sujeitos ao TOTP.
+ */
+async function garantirEmailDoAdmin(admin) {
+  const usuarios = await admin.listar(
+    `/realms/master/users?username=${encodeURIComponent(ADMIN_USER)}`,
+  );
+  const conta = usuarios.find((usuario) => usuario.username === ADMIN_USER);
+  if (conta === undefined) {
+    falhar(`admin local ${ADMIN_USER} nao foi encontrado no realm master`);
+    return;
+  }
+
+  if (conta.email === ADMIN_EMAIL && conta.emailVerified === true) {
+    registrar(`admin local com e-mail verificado: ${ADMIN_EMAIL}`);
+    return;
+  }
+
+  const resposta = await admin.atualizar(`/realms/master/users/${conta.id}`, {
+    ...conta,
+    id: conta.id,
+    email: ADMIN_EMAIL,
+    emailVerified: true,
+  });
+  if (!resposta.ok) {
+    falhar(`admin local: e-mail -> HTTP ${resposta.status} ${await resposta.text()}`);
+  } else {
+    registrar(`admin local atualizado com e-mail verificado: ${ADMIN_EMAIL}`);
   }
 }
 
@@ -418,6 +456,10 @@ async function garantirRealm(admin, definicao) {
       const resposta = await admin.atualizar(`/realms/${realm}/users/${existe.id}`, {
         ...corpo,
         id: existe.id,
+        // Keycloak 26 trata `username` como somente leitura em contas ja
+        // criadas. O loginWithEmailAllowed do realm permite o e-mail como
+        // identificador sem precisar reescrever essa coluna.
+        username: existe.username,
       });
       if (!resposta.ok) {
         falhar(`conta ${conta.entrada} -> HTTP ${resposta.status} ${await resposta.text()}`);
@@ -473,6 +515,11 @@ try {
 }
 
 console.log(`Keycloak em ${KEYCLOAK} - modo ${soVerificar ? 'verificacao' : 'aplicacao'}`);
+try {
+  await garantirEmailDoAdmin(admin);
+} catch (erro) {
+  falhar(`admin local: ${String(erro)}`);
+}
 for (const definicao of DEFINICOES) {
   console.log(`\n${definicao.realm}`);
   try {

@@ -456,3 +456,21 @@ HMAC do cookie enviado pelo navegador, desde que a mutação continue exigindo
 sessão válida, Origin permitido e conferência do HMAC. `GET /auth/csrf` devolve
 somente esse valor e não altera estado; `POST` continua protegido. O cliente
 mantém o token apenas em memória e o apaga ao sair ou trocar contexto.
+
+---
+
+## 16. E-mail como identificador não é o mesmo que remover MFA
+
+**Decisao.** A conta institucional passou a ser apresentada e usada com
+`servidor.saude@exemplo.invalid`, mas o realm continua exigindo
+`CONFIGURE_TOTP`.
+
+**Por que.** `loginWithEmailAllowed` já permite e-mail no formulário do
+Keycloak. Reescrever o `username` de contas existentes não era necessário — e
+o Keycloak 26 o trata como somente leitura. O provisionamento passou a manter
+o username legado, procurar por e-mail quando necessário e deixar
+`emailVerified=true` nas contas de demonstração.
+
+**Aprendizado.** Trocar o identificador melhora a entrada sem transformar
+senha em segundo fator. A API continua recusando token institucional sem prova
+de MFA, e o navegador confirmou o caminho por e-mail até a tela de TOTP.

@@ -110,7 +110,7 @@ const CATALOGO = [
     },
     sla: { name: 'Infraestrutura - 5 dias uteis', minutes: 720, value: 5, unit: 'BUSINESS_DAYS', published: true },
     team: 'Atendimento de vias',
-    servidores: [{ usuario: 'servidor.infra', papel: 'ATTENDANT' }],
+    servidores: [{ usuario: 'servidor.infra@exemplo.invalid', papel: 'ATTENDANT' }],
   },
   {
     secretariat: {
@@ -133,7 +133,7 @@ const CATALOGO = [
     },
     sla: { name: 'Saude - 3 dias uteis', minutes: 360, value: 3, unit: 'BUSINESS_DAYS', published: true },
     team: 'Agendamento',
-    servidores: [{ usuario: 'servidor.saude', papel: 'ATTENDANT' }],
+    servidores: [{ usuario: 'servidor.saude@exemplo.invalid', papel: 'ATTENDANT' }],
   },
   {
     secretariat: {
@@ -204,12 +204,24 @@ async function tokenDeAdministrador() {
  * o servidor entra e recebe acesso negado sem nenhuma pista do porque.
  */
 async function subjectDe(token, realm, username) {
-  const resposta = await fetch(
+  let resposta = await fetch(
     `${env['KEYCLOAK_URL']}/admin/realms/${realm}/users?username=${encodeURIComponent(username)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!resposta.ok) throw new Error(`busca de ${username} -> HTTP ${resposta.status}`);
-  const usuarios = await resposta.json();
+  let usuarios = await resposta.json();
+  // As contas antigas do Keycloak mantem username legado (servidor.saude),
+  // enquanto o login aceita o e-mail. Procurar pelo e-mail como fallback torna
+  // a troca do identificador idempotente sem exigir uma alteracao proibida na
+  // coluna username.
+  if (usuarios.length === 0 && username.includes('@')) {
+    resposta = await fetch(
+      `${env['KEYCLOAK_URL']}/admin/realms/${realm}/users?email=${encodeURIComponent(username)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!resposta.ok) throw new Error(`busca de e-mail ${username} -> HTTP ${resposta.status}`);
+    usuarios = await resposta.json();
+  }
   if (usuarios.length === 0) throw new Error(`conta ${username} nao existe no realm ${realm}`);
   return { subject: usuarios[0].id, email: usuarios[0].email };
 }

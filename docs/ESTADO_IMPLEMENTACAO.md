@@ -56,6 +56,19 @@ visual foi refeita para branco, azul-ciano e azul-marinho.
 - **Demonstracao com Playwright e a ausencia de sessao injetada.** Nao
   executado.
 
+### Identificador institucional por e-mail
+
+As contas de servidor agora entram com o e-mail como identificador visivel:
+
+- `servidor.saude@exemplo.invalid` / `ServidorSaude!2026-demo`
+- `servidor.infra@exemplo.invalid` / `ServidorInfra!2026-demo`
+
+O Keycloak confirmou no navegador o campo "Nome de usuário ou e-mail" e levou a
+conta até `CONFIGURE_TOTP`. Portanto a troca do identificador foi verificada,
+mas o TOTP continua obrigatório; não foi removida a segunda camada de proteção.
+O administrador local também ficou com `admin@exemplo.invalid` e
+`emailVerified=true`, aplicado por `infra/docker/keycloak/provisionar.mjs`.
+
 ### Area institucional construida
 
 `apps/web/src/telas/operacao.tsx` agora possui fila paginada, filtro por estado,
