@@ -1,0 +1,39 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Testes e cobertura
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Ambiente: NUNCA versionar. O .env.example e o modelo.
+.env
+.env.*
+!.env.example
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Segredos e chaves
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+keys/
+
+# Uploads e quarentena locais
+infra/data/
+storage/

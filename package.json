@@ -1,0 +1,28 @@
+{
+  "name": "sertania",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" build && pnpm -r --filter \"./apps/**\" build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:unit": "pnpm -r --filter \"./packages/**\" test",
+    "dev": "pnpm -r --parallel dev",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml --env-file .env up -d",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml --env-file .env down",
+    "db:logs": "docker compose -f infra/docker/docker-compose.yml --env-file .env logs -f",
+    "db:migrate": "pnpm --filter @sertania/api db:migrate",
+    "db:revert": "pnpm --filter @sertania/api db:revert",
+    "db:seed": "pnpm --filter @sertania/api db:seed",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test",
+    "audit:deps": "pnpm audit --prod"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // `rootDir` fica so no build: o typecheck inclui os testes, que ficam
+    // fora de `src` e, com `rootDir` aqui, o compilador recusaria.
+    "rootDir": "./src",
+    "noEmit": false
+  },
+  "exclude": ["node_modules", "test", "dist", "**/*.spec.ts"]
+}

@@ -1,0 +1,22 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# O path do workspace contem acento e espaco; manter as entradas com aspas.
+
+# Dependencias autorizadas a rodar script de build. No pnpm 12 a chave e
+# `allowBuilds`; `onlyBuiltDependencies` foi removida. A lista e revisada:
+# incluir um pacote exige justificativa registrada em docs/adr.
+allowBuilds:
+  esbuild: true
+  # argon2 e a biblioteca de derivacao de chave usada para campos restritos.
+  # Precisa de build nativo para performant em Windows e Linux.
+  argon2: true
+  # NestJS, nestjs-pino e unrs-resolver usam postinstall para montar
+  # metadados e resolver nativo. Sem efeito de seguranca.
+  "@nestjs/core": true
+  nestjs-pino: true
+  unrs-resolver: true
+  # Telemetria de download. Desligada de proposito: um projeto de prefeitura
+  # nao deve sinalizar uso a terceiros.
+  "@scarf/scarf": false

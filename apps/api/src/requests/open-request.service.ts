@@ -1,0 +1,316 @@
+/**
+ * Caso de uso: abrir uma solicitacao (especificacao secao 6 e 16).
+ *
+ * Decisoes que sustentam este arquivo:
+ *
+ * 1. O protocolo e reservado NA MESMA TRANSACAO que grava a solicitacao. Se o
+ *    commit falhar, o numero fica reservado e a sequencia pula um valor. E
+ *    melhor que duplicar protocolo: ninguem recebe dois numeros iguais.
+ *
+ * 2. A chave de idempotencia e gravada na mesma transacao. Uma retentativa
+ *    devolve o protocolo ja criado em vez de abrir um segundo pedido.
+ *
+ * 3. Nao existe `PATCH /requests/{id}` que aceite status. As transicoes passam
+ *    pelo caso de uso de workflow, que valida contra a tabela de regras.
+ *
+ * 4. A versao do servico e CONGELADA no pedido. Mudanca futura no catalogo nao
+ *    altera o registro original.
+ */
+import { Injectable, Logger } from '@nestjs/common';
+import { DataSource, type EntityManager } from 'typeorm';
+import {
+  classifyIdempotencyLookup,
+  hashRequestPayload,
+  idempotencyExpiry,
+  isValidIdempotencyKey,
+  newRequestId,
+  type InformationClassification,
+  type RequestChannel,
+  type WorkflowCommand,
+  canTransition,
+  targetStateFor,
+  type RequestState,
+  TRANSITION_RULES,
+} from '@sertania/contracts';
+import { ProtocolService } from './protocol.service';
+
+export interface OpenRequestInput {
+  readonly citizenId: string;
+  readonly createdBy: string;
+  readonly channel: RequestChannel;
+  readonly serviceVersionId: string;
+  readonly secretariatId: string;
+  readonly unitId: string;
+  readonly slaPolicyId: string;
+  readonly classification: InformationClassification;
+  readonly description: string;
+  readonly formAnswers: Record<string, unknown>;
+  readonly location?: {
+    readonly addressText: string;
+    readonly reference?: string;
+    readonly locality?: string;
+    readonly latitude?: number;
+    readonly longitude?: number;
+    readonly precisionSource: 'MAP_PICK' | 'TYPED' | 'GEOCODED' | 'UNKNOWN';
+    readonly precisionMeters?: number;
+  } | null;
+  readonly identityVerificationMethod?: string | null;
+  readonly assistedNote?: string | null;
+}
+
+export type OpenRequestResult =
+  | {
+      readonly outcome: 'CREATED';
+      readonly requestId: string;
+      readonly protocol: string;
+      readonly state: RequestState;
+      readonly submittedAt: Date;
+    }
+  | {
+      readonly outcome: 'REPLAYED';
+      readonly requestId: string;
+      readonly protocol: string;
+      readonly state: RequestState;
+      readonly submittedAt: Date;
+    }
+  | { readonly outcome: 'IN_FLIGHT' }
+  | { readonly outcome: 'IDEMPOTENCY_MISMATCH' };
+
+@Injectable()
+export class OpenRequestService {
+  private readonly logger = new Logger(OpenRequestService.name);
+
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly protocol: ProtocolService,
+  ) {}
+
+  /**
+   * Abre a solicitacao. Tudo numa transacao: chave, protocolo, pedido,
+   * conteudo, local e evento de criacao.
+   */
+  async open(input: OpenRequestInput, idempotencyKey: string | undefined, now: Date): Promise<OpenRequestResult> {
+    const operation = 'REQUEST_OPEN';
+    const requestHash = hashRequestPayload(input);
+
+    if (idempotencyKey !== undefined && !isValidIdempotencyKey(idempotencyKey)) {
+      throw new Error('Chave de idempotencia invalida');
+    }
+
+    return this.dataSource.transaction(async (manager) => {
+      // 1. Chave de idempotencia. A busca e feita dentro da transacao para
+      //    que uma retentativa concorrente veja o registro.
+      if (idempotencyKey !== undefined) {
+        const existing = await manager.query(
+          `SELECT "key", "request_hash", "result_entity_id", "expires_at"
+             FROM "idempotency_keys"
+            WHERE "user_id" = $1 AND "operation" = $2 AND "key" = $3
+            FOR UPDATE`,
+          [input.citizenId, operation, idempotencyKey],
+        );
+
+        if (existing.length > 0) {
+          const row = existing[0] as {
+            key: string;
+            request_hash: string;
+            result_entity_id: string | null;
+            expires_at: Date;
+          };
+          const classification = classifyIdempotencyLookup({
+            found: true,
+            storedHash: row.request_hash,
+            requestHash,
+            resultEntityId: row.result_entity_id,
+            expiresAt: new Date(row.expires_at),
+            now,
+          });
+
+          if (classification.kind === 'MISMATCH') {
+            // Reuso de chave com corpo diferente e erro do cliente, e nao
+            // falha de infraestrutura. O cliente precisa gerar chave nova.
+            this.logger.warn('Chave de idempotencia reusada com corpo diferente');
+            return { outcome: 'IDEMPOTENCY_MISMATCH' };
+          }
+          if (classification.kind === 'IN_FLIGHT') {
+            return { outcome: 'IN_FLIGHT' };
+          }
+          if (classification.kind === 'REPLAY') {
+            const previous = await this.loadRequest(manager, classification.resultEntityId);
+            if (previous !== null) {
+              this.logger.log(`Retentativa devolve o protocolo ${previous.protocol}`);
+              return {
+                outcome: 'REPLAYED',
+                requestId: previous.id,
+                protocol: previous.protocol,
+                state: previous.state,
+                submittedAt: previous.submitted_at,
+              };
+            }
+          }
+          // NEW com chave existente significa chave expirada: seguimos e
+          // sobrescrevemos a linha.
+        }
+
+        await manager.query(
+          `INSERT INTO "idempotency_keys"
+             ("user_id","operation","key","request_hash","expires_at","created_at")
+           VALUES ($1,$2,$3,$4,$5, now())
+           ON CONFLICT ("user_id","operation","key")
+           DO UPDATE SET
+             "request_hash" = EXCLUDED."request_hash",
+             "result_entity_id" = NULL,
+             "expires_at" = EXCLUDED."expires_at"`,
+          [input.citizenId, operation, idempotencyKey, requestHash, idempotencyExpiry(now)],
+        );
+      }
+
+      // 2. Protocolo, na mesma transacao do pedido.
+      const protocol = await this.protocol.nextProtocol(manager, now);
+      const requestId = newRequestId();
+
+      // 3. Pedido. O estado inicial e SUBMITTED: o protocolo ja nasce no
+      //    envio, e um rascunho nao recebe protocolo.
+      const inserted = await manager.query(
+        `INSERT INTO "requests"
+           ("id","protocol","citizen_id","created_by","channel","service_version_id",
+            "secretariat_id","unit_id","state","classification","sla_policy_id",
+            "submitted_at","cycle_started_at","version",
+            "identity_verification_method","assisted_note","created_at","updated_at")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'SUBMITTED',$9,$10, $11,$11, 1, $12,$13, $11,$11)
+         RETURNING "id","protocol","state","submitted_at"`,
+        [
+          requestId,
+          protocol,
+          input.citizenId,
+          input.createdBy,
+          input.channel,
+          input.serviceVersionId,
+          input.secretariatId,
+          input.unitId,
+          input.classification,
+          input.slaPolicyId,
+          now,
+          input.identityVerificationMethod ?? null,
+          input.assistedNote ?? null,
+        ],
+      );
+
+      // 4. Conteudo. Descricao e respostas do formulario na versao congelada.
+      await manager.query(
+        `INSERT INTO "request_content" ("request_id","description","form_answers")
+         VALUES ($1,$2,$3)`,
+        [requestId, input.description, JSON.stringify(input.formAnswers)],
+      );
+
+      // 5. Local, quando informado. A coordenada e opcional e validada antes
+      //    de chegar aqui.
+      if (input.location !== null && input.location !== undefined) {
+        const point =
+          input.location.latitude !== undefined && input.location.longitude !== undefined
+            ? `SRID=4326;POINT(${input.location.longitude} ${input.location.latitude})`
+            : null;
+        await manager.query(
+          `INSERT INTO "request_locations"
+             ("request_id","address_text","reference","locality","point",
+              "precision_source","precision_meters")
+           VALUES ($1,$2,$3,$4, $5::geography, $6, $7)`,
+          [
+            requestId,
+            input.location.addressText,
+            input.location.reference ?? null,
+            input.location.locality ?? null,
+            point,
+            input.location.precisionSource,
+            input.location.precisionMeters ?? null,
+          ],
+        );
+      }
+
+      // 6. Ciclo de atendimento, para medir o tempo por ciclo.
+      await manager.query(
+        `INSERT INTO "request_cycles" ("request_id","cycle_number","started_at","from_reopen")
+         VALUES ($1, 1, $2, false)`,
+        [requestId, now],
+      );
+
+      // 7. Evento visivel ao cidadao. O primeiro texto precisa explicar o
+      //    proximo passo, nao apenas dizer que o sistema recebeu.
+      await manager.query(
+        `INSERT INTO "request_events"
+           ("request_id","actor_user_id","type","visibility","state_before","state_after",
+            "public_text","cycle_number","created_at")
+         VALUES ($1,$2,'SUBMITTED','CITIZEN_VISIBLE', NULL, 'SUBMITTED', $3, 1, $4)`,
+        [
+          requestId,
+          input.createdBy,
+          `Solicitacao registrada com o protocolo ${protocol}. Voce pode acompanhar o andamento por aqui.`,
+          now,
+        ],
+      );
+
+      // 8. Outbox, na MESMA transacao. A falha de e-mail depois nao desfaz o
+      //    protocolo ja confirmado.
+      await manager.query(
+        `INSERT INTO "outbox_events" ("type","payload","idempotency_key","created_at")
+         VALUES ('REQUEST_RECEIVED', $1, $2, $3)`,
+        [
+          JSON.stringify({ requestId, protocol, citizenId: input.citizenId }),
+          `REQUEST_RECEIVED:${requestId}`,
+          now,
+        ],
+      );
+
+      // 9. Liga o resultado a chave, para a retentativa futura.
+      if (idempotencyKey !== undefined) {
+        await manager.query(
+          `UPDATE "idempotency_keys" SET "result_entity_id" = $1
+            WHERE "user_id" = $2 AND "operation" = $3 AND "key" = $4`,
+          [requestId, input.citizenId, operation, idempotencyKey],
+        );
+      }
+
+      const row = inserted[0] as { id: string; protocol: string; state: RequestState };
+      this.logger.log(`Solicitacao ${protocol} aberta para o cidadao ${input.citizenId}`);
+
+      return {
+        outcome: 'CREATED',
+        requestId: row.id,
+        protocol: row.protocol,
+        state: row.state,
+        submittedAt: now,
+      };
+    });
+  }
+
+  private async loadRequest(
+    manager: EntityManager,
+    requestId: string,
+  ): Promise<{ id: string; protocol: string; state: RequestState; submitted_at: Date } | null> {
+    const rows = await manager.query(
+      `SELECT "id","protocol","state","submitted_at" FROM "requests" WHERE "id" = $1`,
+      [requestId],
+    );
+    if (rows.length === 0) return null;
+    return rows[0] as { id: string; protocol: string; state: RequestState; submitted_at: Date };
+  }
+}
+
+/**
+ * Validador de transicoes, exposto para os casos de uso de workflow.
+ *
+ * Existe como funcao separada para que a regra possa ser testada sem banco e
+ * para deixar explicito que a tabela de `@sertania/contracts` e a unica fonte
+ * de verdade sobre transicoes possiveis.
+ */
+export function assertTransitionAllowed(state: RequestState, command: WorkflowCommand): RequestState {
+  if (!canTransition(state, command)) {
+    throw new Error(`Comando ${command} nao e valido a partir do estado ${state}`);
+  }
+  const target = targetStateFor(state, command);
+  if (target === null) {
+    throw new Error(`Destino indefinido para ${command} em ${state}`);
+  }
+  return target;
+}
+
+export { TRANSITION_RULES };

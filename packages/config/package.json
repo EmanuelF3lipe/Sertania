@@ -1,0 +1,16 @@
+{
+  "name": "@sertania/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": ["tsconfig.base.json"],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo \"[config] sem lint proprio\"",
+    "test": "echo \"[config] sem testes proprios\"",
+    "build": "echo \"[config] sem build\""
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
