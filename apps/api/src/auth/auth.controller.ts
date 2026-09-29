@@ -245,8 +245,14 @@ export class AuthController {
 
       this.setSessionCookie(response, cookie);
 
-      // Destino apos login: o servidor vai para a fila, o cidadao para a lista.
-      response.redirect(`${front}/${isServer ? 'servidor' : 'minhas-solicitacoes'}`);
+      // O destino fica com a INTERFACE, e nao com a API.
+      //
+      // A API sabe se a pessoa e cidadao ou servidor, mas a rota que mostra o
+      // que cada um ve pertence a interface. Redirectar para um caminho
+      // fixo aqui duplicaria essa regra em dois lugares, e o primeiro sinal de
+      // que algo quebrou seria uma tela em branco depois de um login
+      // bem-sucedido. A interface le `/me` e escolhe a rota.
+      response.redirect(`${front}/`);
     } catch (error) {
       this.auditAuthFailure(undefined, 'TROCA_FALHOU', descricaoDoErro(error));
       response.redirect(`${front}/${LOGIN_ERRORS.failed}`);

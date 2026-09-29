@@ -14,6 +14,7 @@ import { validateEnvironment } from './config/environment';
 import { InfrastructureModule } from './infrastructure/infrastructure.module';
 import { RequestsModule } from './requests/requests.module';
 import { AuthModule } from './auth/auth.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { SessionGuard } from './auth/session.guard';
 import { SessionService, CsrfService } from './auth/session.service';
 
@@ -30,6 +31,7 @@ import { SessionService, CsrfService } from './auth/session.service';
     InfrastructureModule,
     RequestsModule,
     AuthModule,
+    CatalogModule,
   ],
   providers: [
     {

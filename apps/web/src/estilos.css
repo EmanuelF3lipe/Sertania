@@ -1,0 +1,203 @@
+/* ==========================================================================
+   Folha de estilo unica.
+
+   Duas regras que vem da especificacao e nao do gosto:
+
+   1. O layout funciona em 320 px. A prefixedura e por tampao, com a coluna
+      principal em `minmax(0, 1fr)`: sem isso, um nome longo de secretaria
+      empurra a tabela para fora da tela em vez de quebrar a linha.
+
+   2. O foco e visivel e o estado nunca depende SO de cor. Todo estado tem um
+      rotulo em texto, e o contorno de foco nao e removido em lugar nenhum.
+   ========================================================================== */
+
+:root {
+  --cor-fundo: #f4f4f2;
+  --cor-superficie: #ffffff;
+  --cor-texto: #1a1a1a;
+  --cor-texto-suave: #55534e;
+  --cor-borda: #c9c6bf;
+  --cor-primaria: #14532d;
+  --cor-primaria-clara: #e6efe8;
+  --cor-perigo: #8a1c1c;
+  --cor-perigo-clara: #fbeaea;
+  --cor-aviso: #7a5200;
+  --cor-aviso-clara: #fdf3dd;
+  --raio: 6px;
+  --foco: 3px solid #1d4ed8;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --cor-fundo: #14161a;
+    --cor-superficie: #1c1f25;
+    --cor-texto: #f2f2f0;
+    --cor-texto-suave: #b8b5ae;
+    --cor-borda: #3b3f47;
+    --cor-primaria: #7ee2a8;
+    --cor-primaria-clara: #17301f;
+    --cor-perigo: #ff9a9a;
+    --cor-perigo-clara: #3a1b1b;
+    --cor-aviso: #ffd27a;
+    --cor-aviso-clara: #33280f;
+    --foco: 3px solid #8ab4ff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+:focus-visible { outline: var(--foco); outline-offset: 2px; }
+
+.pular-para-conteudo {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--cor-superficie);
+  padding: 0.6rem 1rem;
+  z-index: 10;
+}
+.pular-para-conteudo:focus { left: 0; }
+
+.topo {
+  background: var(--cor-primaria);
+  color: #fff;
+  padding: 0.75rem 1rem;
+}
+.topo-conteudo {
+  max-width: 72rem;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.topo h1 { font-size: 1.05rem; margin: 0; }
+.topo a, .topo button { color: #fff; }
+
+.conteudo {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.abas { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.abas a {
+  color: #fff;
+  text-decoration: none;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--raio);
+}
+.abas a[aria-current='page'] { background: #fff; color: var(--cor-primaria); font-weight: 600; }
+
+.cartao {
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.cartao h2 { margin-top: 0; font-size: 1.1rem; }
+
+.rotulo { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+.dica { color: var(--cor-texto-suave); font-size: 0.9rem; margin-top: 0.25rem; }
+
+input, textarea, select {
+  width: 100%;
+  font: inherit;
+  color: var(--cor-texto);
+  background: var(--cor-superficie);
+  border: 1px solid var(--cor-borda);
+  border-radius: var(--raio);
+  padding: 0.55rem 0.65rem;
+}
+textarea { min-height: 7rem; resize: vertical; }
+
+.campo { margin-bottom: 1rem; }
+.campo-erro input, .campo-erro textarea { border-color: var(--cor-perigo); }
+
+button, .botao {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--raio);
+  border: 1px solid transparent;
+  padding: 0.55rem 1rem;
+  background: var(--cor-primaria);
+  color: #fff;
+  text-decoration: none;
+  display: inline-block;
+}
+button.secundario { background: transparent; color: var(--cor-primaria); border-color: var(--cor-primaria); }
+button.perigo { background: var(--cor-perigo); }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.aviso {
+  border-left: 4px solid;
+  border-radius: var(--raio);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.aviso-erro { background: var(--cor-perigo-clara); border-color: var(--cor-perigo); }
+.aviso-atencao { background: var(--cor-aviso-clara); border-color: var(--cor-aviso); }
+.aviso-info { background: var(--cor-primaria-clara); border-color: var(--cor-primaria); }
+
+.etiqueta {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid;
+}
+/* O texto do estado vem SEMPRE junto. A cor e um reforco, nunca a unica
+   informacao: quem nao distingue verde de vermelho precisa ler "Em analise". */
+.etiqueta-ativa { background: var(--cor-primaria-clara); color: var(--cor-primaria); border-color: var(--cor-primaria); }
+.etiqueta-fim { background: var(--cor-texto-suave); color: var(--cor-texto); border-color: var(--cor-texto-suave); }
+.etiqueta-espera { background: var(--cor-aviso-clara); color: var(--cor-aviso); border-color: var(--cor-aviso); }
+
+.lista { list-style: none; padding: 0; margin: 0; }
+.lista li { border-top: 1px solid var(--cor-borda); padding: 0.85rem 0; }
+.lista li:first-child { border-top: none; }
+
+.linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.linha-do-tempo { list-style: none; padding: 0; margin: 0; }
+.linha-do-tempo li { border-left: 3px solid var(--cor-borda); padding: 0 0 0.9rem 0.9rem; }
+.linha-do-tempo time { color: var(--cor-texto-suave); font-size: 0.85rem; }
+
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--cor-borda); vertical-align: top; }
+th { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.passos { display: flex; flex-wrap: wrap; gap: 0.4rem; list-style: none; padding: 0; margin: 0 0 1rem; font-size: 0.9rem; }
+.passos li { border: 1px solid var(--cor-borda); border-radius: 999px; padding: 0.2rem 0.7rem; }
+.passos li[aria-current='step'] { background: var(--cor-primaria); color: #fff; border-color: var(--cor-primaria); }
+
+.grade-duas { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+@media (min-width: 45rem) { .grade-duas { grid-template-columns: 1fr 1fr; } }
+
+@media (max-width: 22rem) {
+  .conteudo { padding: 0.75rem; }
+  h1 { font-size: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

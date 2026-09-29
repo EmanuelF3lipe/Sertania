@@ -1,0 +1,31 @@
+<!doctype html>
+<!--
+  `lang="pt-BR"` nao e detalhe de traducao: leitores de tela usam o atributo para
+  escolher a regra de pronuncia, e sem ele a leitura de um texto em portugues com
+  fonetica inglesa atrapalha quem tem baixa visao.
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      `viewport` sem `user-scalable=no`: impedir o zoom quebra a acessibilidade
+      de quem precisa aumentar a letra. A prefeitura nao pode escolher isso em
+      nome de quem usa.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sertania - Prefeitura Municipal</title>
+  </head>
+  <body>
+    <!--
+      O `noscript` existe porque a interface depende de JavaScript. Sem esta
+      mensagem, quem tem o scripting desligado ve uma pagina em branco, sem
+      nenhuma pista do que aconteceu.
+    -->
+    <noscript>
+      Este servico precisa de JavaScript para funcionar. Se voce nao consegue usa-lo,
+      ligue para a prefeitura e faremos o atendimento por telefone.
+    </noscript>
+    <div id="raiz"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

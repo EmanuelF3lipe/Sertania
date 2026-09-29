@@ -30,6 +30,77 @@ navegador**, com uma ressalva importante na tabela abaixo.
 
 Gates: `pnpm lint` 0 problemas, `pnpm typecheck` 0 erros, `pnpm build` sem erro.
 
+## Marco C - Interface (incompleto)
+
+`apps/web` existe, com Vite, React e TypeScript no mesmo rigor da API. O fluxo do
+cidadao foi construido e verificado no navegador ate a tela de revisao.
+
+### Verificado no navegador, com login real
+
+| Passo | Evidencia |
+| --- | --- |
+| Tela de entrada | Duas entradas separadas, "Sou cidadao" e "Sou servidor" |
+| Login real | Formulario do Keycloak aceitou `cidadao.a@exemplo.invalid`; a sessao voltou e a interface reconheceu o cidadao |
+| Estado vazio | "Voce ainda nao tem nenhuma solicitacao", com atalho para abrir a primeira |
+| Catalogo | As tres secretarias e os tres servicos vindos de `GET /catalog`, com o prazo em texto e o aviso de prazo simulado |
+| Assistencia | Passos 1 a 4, escolha de servico, descricao com validacao minima, e revisao com secretaria, servico, prazo e descricao |
+
+### O que NAO esta verificado
+
+- **O envio da solicitacao nao chegou a ser executado.** A tela de revisao
+  mostra os dados corretos e o botao esta habilitado, mas o clique nao produziu
+  nenhuma requisicao: o log da API nao registra POST em `/requests`. A causa
+  **nao foi diagnosticada**. Nao se pode afirmar que a abertura de pedido
+  funciona pela interface.
+- **Tela da fila institucional, do detalhe do servidor e dos comandos.** A
+  interface mostra, para quem entra como servidor, um aviso honesto de que a
+  tela ainda nao foi construida. As rotas existem e tem 40 testes de integracao.
+- **Demonstracao com Playwright e a ausencia de sessao injetada.** Nao
+  executado.
+
+### Bugs encontrados construindo a interface
+
+1. **A API devolvia `{ items, total, limit, offset }` e a interface esperava um
+   array.** A tela quebrava com `pedidos.map is not a function` depois de um
+   login bem-sucedido. Nao apareceria em teste de API, porque a resposta estava
+   certa: quem estava errado era quem esperava outra coisa.
+2. **O redirecionamento pos-login duplicava a regra de rotas.** A API mandava
+   para `/minhas-solicitacoes`, caminho que so a interface devia conhecer, e a
+   tela ficava em branco. Agora a API manda para a raiz da interface, que le
+   `/me` e escolhe a rota.
+
+### Lacuna de schema encontrada
+
+A especificacao diz que "cada versao de servico referencia uma politica com
+prazo de primeira resposta humana, prazo de conclusao, calendario, unidade de
+contagem e regra de pausa". O esquema inicial **nao tinha essa coluna**, e sem
+ela a interface nao tem como saber qual prazo mostrar.
+
+Corrigido com a migration `1730000001000-LinkSlaPolicyToServiceVersion`, que
+adiciona `service_versions.sla_policy_id` em tres etapas: coluna anulavel,
+preenchimento, e so entao `NOT NULL` com a chave estrangeira `ON DELETE
+RESTRICT`. A migration **recusa rodar** quando existe versao sem politica e nao
+ha politica publicada, com mensagem que diz o que fazer. Isso aconteceu de
+verdade: ela barrou a primeira execucao por causa de um servico residuo de um
+teste antigo.
+
+### Dados de demonstracao
+
+`infra/docker/seed/seed-dev.mjs` cria as tres secretarias, um servico em cada
+uma, unidade, prazo, equipe, e vincula os servidores do Keycloak as suas
+secretarias lendo o `subject` pela API de administracao.
+
+Os tres casos sao escolhidos porque cada um exercita uma regra diferente:
+Infraestrutura (classificacao publica) primeiro, Saude (RESTRICTED) para o caso
+de acesso negado entre areas, e Educacao (exige representacao) para o caso de
+menores.
+
+O seed **reconcilia** em vez de apenas criar. A primeira versao pulava a
+secretaria que ja existisse, e o resultado foi uma secretaria de Saude com nome
+trocado, sem descricao e sem servico, que o script anunciava "ja existe" em toda
+execucao seguinte. Um seed que nao converge para o que o arquivo declara deixa
+de ser verdade sobre o ambiente.
+
 ## Banco de dados dedicado para os testes
 
 Os testes de integracao rodavam contra o mesmo banco das demonstracoes locais e
