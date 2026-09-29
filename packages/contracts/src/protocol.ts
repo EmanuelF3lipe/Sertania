@@ -68,6 +68,11 @@ export interface ProtocolSequenceRow {
  * nunca recebe dois protocolos iguais, e pular um numero nao incomoda ninguem.
  */
 export function reserveNextProtocolSql(year: number): string {
+  // O ano e parametro de CHAMADA, nao de SQL. Ele nao entra no texto porque a
+  // consulta usa `$1`, e quem substitui e o array de parametros do driver. O
+  // parametro existe para tornar o ano explicito na assinatura e permitir
+  // conferir, no log, que o ano reservado e o do instante de envio.
+  void year;
   // O ano entra como parametro ($1), nunca concatenado: query parametrizada e
   // obrigatoria, e concatenar tornaria o valor nao-confiavel.
   return `

@@ -107,7 +107,7 @@ describe('politica de bucket privado', () => {
   });
 
   it('a politica nega GetObject e ListBucket para todos', async () => {
-    const { client, calls } = makeClient();
+    const { client } = makeClient();
     let captured: string | null = null;
     const internals = client as unknown as {
       send: (method: string, path: string, options?: { body?: Buffer }) => Promise<unknown>;

@@ -60,9 +60,32 @@ function required(env: Record<string, unknown>, key: string): string {
   return value;
 }
 
+/**
+ * Le um valor de ambiente como texto.
+ *
+ * O ConfigModule entrega `string`, mas o tipo declarado e `unknown` porque a
+ * funcao tambem e chamada em teste com objeto montado a mao. Converter com
+ * `String()` um valor que ja e objeto produziria `[object Object]` e a
+ * validacao passaria por um valor invalido.
+ */
+function text(env: Record<string, unknown>, key: string, fallback?: string): string {
+  const raw = env[key];
+  if (raw === undefined || raw === null || raw === '') {
+    if (fallback !== undefined) return fallback;
+    throw new Error(`Variavel de ambiente obrigatoria ausente: ${key}`);
+  }
+  if (typeof raw !== 'string' && typeof raw !== 'number' && typeof raw !== 'boolean') {
+    throw new Error(`Variavel ${key} deve ser texto, recebido ${typeof raw}`);
+  }
+  return String(raw);
+}
+
 function optionalInt(env: Record<string, unknown>, key: string, fallback: number): number {
   const raw = env[key];
-  if (raw === undefined || raw === '') return fallback;
+  if (raw === undefined || raw === null || raw === '') return fallback;
+  if (typeof raw !== 'string' && typeof raw !== 'number') {
+    throw new Error(`Variavel ${key} deve ser numerica, recebido ${typeof raw}`);
+  }
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new Error(`Variavel ${key} deve ser um inteiro positivo, recebido: ${String(raw)}`);
@@ -71,19 +94,22 @@ function optionalInt(env: Record<string, unknown>, key: string, fallback: number
 }
 
 function boolean(value: unknown, fallback: boolean): boolean {
-  if (value === undefined || value === '') return fallback;
-  return String(value).toLowerCase() === 'true';
+  if (value === undefined || value === null || value === '') return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') {
+    throw new Error(`Valor booleano invalido: ${typeof value}`);
+  }
+  return value.toLowerCase() === 'true';
 }
 
 /**
  * Validador executado pelo ConfigModule antes de a aplicacao subir.
  */
 export function validateEnvironment(input: Record<string, unknown>): ValidatedEnvironment {
-  const nodeEnvRaw = String(input['NODE_ENV'] ?? 'development');
+  const nodeEnvRaw = text(input, 'NODE_ENV', 'development');
   if (!['development', 'test', 'production'].includes(nodeEnvRaw)) {
     throw new Error(`NODE_ENV invalido: ${nodeEnvRaw}`);
   }
-  const isProduction = nodeEnvRaw === 'production';
   const isLocal = nodeEnvRaw === 'development' || nodeEnvRaw === 'test';
 
   const sessionSecret = required(input, 'SESSION_SECRET');
@@ -128,10 +154,10 @@ export function validateEnvironment(input: Record<string, unknown>): ValidatedEn
     NODE_ENV: nodeEnvRaw,
     SESSION_IDLE_TTL_SECONDS: String(idleTtl),
     SESSION_ABSOLUTE_TTL_SECONDS: String(absoluteTtl),
-    POSTGRES_PORT: String(input['POSTGRES_PORT'] ?? '5432'),
-    CLAMAV_PORT: String(input['CLAMAV_PORT'] ?? '3310'),
-    SMTP_PORT: String(input['SMTP_PORT'] ?? '1025'),
-    DATA_ENCRYPTION_KEY_VERSION: String(input['DATA_ENCRYPTION_KEY_VERSION'] ?? '1'),
+    POSTGRES_PORT: text(input, 'POSTGRES_PORT', '5432'),
+    CLAMAV_PORT: text(input, 'CLAMAV_PORT', '3310'),
+    SMTP_PORT: text(input, 'SMTP_PORT', '1025'),
+    DATA_ENCRYPTION_KEY_VERSION: text(input, 'DATA_ENCRYPTION_KEY_VERSION', '1'),
     DEMO_SLA_SIMULATED: boolean(input['DEMO_SLA_SIMULATED'], true) ? 'true' : 'false',
     SESSION_COOKIE_SECURE: boolean(input['SESSION_COOKIE_SECURE'], !isLocal) ? 'true' : 'false',
   };

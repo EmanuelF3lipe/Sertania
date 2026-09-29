@@ -14,6 +14,7 @@ import {
   protocolYear,
   reserveNextProtocolSql,
 } from '@sertania/contracts';
+import { type Transaction } from '../database/typed-query';
 
 @Injectable()
 export class ProtocolService {
@@ -29,17 +30,17 @@ export class ProtocolService {
    * valor. Isso e aceitavel e preferivel a duplicidade: ninguem recebe dois
    * protocolos iguais, e pular um numero nao gera efeito visivel.
    */
-  async nextProtocol(
-    manager: { query: (sql: string, params: unknown[]) => Promise<Array<{ last_value: string | number }>> },
-    at: Date,
-  ): Promise<string> {
+  async nextProtocol(tx: Transaction, at: Date): Promise<string> {
     const year = protocolYear(at);
-    const rows = await manager.query(reserveNextProtocolSql(year), [year]);
+    const rows = await tx.run(reserveNextProtocolSql(year), [year]);
     const row = rows[0];
     if (row === undefined) {
       throw new Error('Reserva de numero de protocolo nao devolveu valor');
     }
-    const sequence = Number(row.last_value);
+    const sequence = Number(row['last_value']);
+    if (!Number.isFinite(sequence)) {
+      throw new Error(`Reserva devolveu valor inesperado: ${String(row['last_value'])}`);
+    }
     this.logger.log(`Protocolo reservado: ${formatProtocol(year, sequence)}`);
     return formatProtocol(year, sequence);
   }

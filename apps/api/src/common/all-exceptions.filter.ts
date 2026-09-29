@@ -72,7 +72,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   private classify(exception: unknown): {
     status: number;
-    code: ApiErrorCode | string;
+    // O codigo pode ser o do dominio ou o mapeado pelo status. A uniao com
+    // `string` e redundante para o compilador, mas o campo aceita ambos.
+    code: string;
     message: string;
   } {
     if (exception instanceof DomainError) {

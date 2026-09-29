@@ -74,16 +74,33 @@ export interface SlaClockResult {
 
 export type SlaTarget = 'FIRST_RESPONSE' | 'RESOLUTION';
 
+/**
+ * Formatador para extrair hora e minuto na zona municipal.
+ *
+ * O `year` e `day` ficam de fora de proposito: esta funcao so precisa da hora,
+ * e incluir mais campos tornaria a extracao mais lenta sem ganho.
+ */
 function zoneFormatter(): Intl.DateTimeFormat {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: MUNICIPAL_TIMEZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+/**
+ * Formatador completo, para extrair a data local na zona padrao.
+ *
+ * Separado de `zoneFormatter` porque os dois precisam de campos diferentes, e
+ * um unico formatador com tudo seria mais lento nas duas situacoes.
+ */
+function dateFormatter(): Intl.DateTimeFormat {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: MUNICIPAL_TIMEZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
   });
 }
 
@@ -111,9 +128,9 @@ export function localMinuteOfDay(zone: string, instant: Date): number {
   return hour * 60 + minute;
 }
 
-function isWeekend(date: string): boolean {
-  const day = new Date(`${date}T12:00:00Z`).getUTCDay();
-  return day === 0 || day === 6;
+/** Data local do instante na zona municipal padrao. */
+export function localDate(instant: Date): string {
+  return `${dateFormatter().format(instant)}`;
 }
 
 /**

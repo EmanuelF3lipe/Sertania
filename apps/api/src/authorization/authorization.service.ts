@@ -10,7 +10,6 @@
  * na proxima operacao, mesmo com sessao valida em maos.
  */
 import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
 import {
   authorize,
   type Action,
@@ -19,6 +18,7 @@ import {
   type Membership,
   type AccessGrant,
 } from '@sertania/contracts';
+import { Database } from '../database/typed-query';
 import type { SessionClaims } from '../auth/session.service';
 
 export interface AuthorizationDecision {
@@ -66,7 +66,7 @@ function toGrant(row: Record<string, unknown>): AccessGrant {
 
 @Injectable()
 export class AuthorizationService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(private readonly db: Database) {}
 
   /**
    * Monta o sujeto de autorizacao a partir da sessao e do estado atual do banco.
@@ -76,7 +76,7 @@ export class AuthorizationService {
    */
   async subjectFor(session: SessionClaims, now: Date): Promise<AuthorizationSubject> {
     const [memberships, grants] = await Promise.all([
-      this.dataSource.query(
+      this.db.run(
         `SELECT ${MEMBER_COLUMNS}
            FROM "memberships" m
           WHERE m."user_id" = $1
@@ -85,7 +85,7 @@ export class AuthorizationService {
             AND (m."expires_at" IS NULL OR m."expires_at" > $2)`,
         [session.userId, now],
       ),
-      this.dataSource.query(
+      this.db.run(
         `SELECT "id", "action", "resource_type", "resource_id", "purpose",
                 "approved_by", "starts_at", "expires_at"
            FROM "access_grants"
@@ -104,12 +104,12 @@ export class AuthorizationService {
       // O driver devolve `timestamptz` como texto, e a politica chama
       // `.getTime()`. Sem a conversao, a checagem de validade do vinculo
       // quebra em tempo de execucao, e um vinculo revogado passaria.
-      memberships: (memberships as Array<Record<string, unknown>>).map(toMembership),
+      memberships: memberships.map(toMembership),
       currentContext:
         session.membershipId !== null && session.secretariatId !== null
           ? { membershipId: session.membershipId, secretariatId: session.secretariatId }
           : null,
-      grants: (grants as Array<Record<string, unknown>>).map(toGrant),
+      grants: grants.map(toGrant),
       now,
     };
   }
@@ -135,14 +135,15 @@ export class AuthorizationService {
    * servidor de Infraestrutura declare que o pedido e de Saude.
    */
   async requestTarget(requestId: string): Promise<AuthorizationTarget | null> {
-    const rows = await this.dataSource.query(
+    const rows = await this.db.run(
       `SELECT "id","citizen_id","assignee_user_id","secretariat_id","unit_id",
               "classification","state"
          FROM "requests" WHERE "id" = $1`,
       [requestId],
     );
     if (rows.length === 0) return null;
-    const row = rows[0] as Record<string, unknown>;
+    const row = rows[0];
+    if (row === undefined) return null;
     return {
       requestId: row['id'] as string,
       ownerCitizenId: row['citizen_id'] as string,
@@ -166,7 +167,7 @@ export class AuthorizationService {
     reason: string;
     correlationId: string;
   }): Promise<void> {
-    await this.dataSource.query(
+    await this.db.run(
       `INSERT INTO "audit_events"
          ("actor_user_id","action","resource_type","resource_id","result","context","correlation_id")
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,

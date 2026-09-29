@@ -18,6 +18,7 @@ import { Logger } from '@nestjs/common';
 import { OpenRequestService } from '../../src/requests/open-request.service';
 import { ProtocolService } from '../../src/requests/protocol.service';
 import { AuthorizationService } from '../../src/authorization/authorization.service';
+import { Database } from '../../src/database/typed-query';
 import {
   actionForCommand,
   requiresOwnership,
@@ -76,7 +77,10 @@ async function cenario(): Promise<Cenario> {
     `INSERT INTO "units" ("secretariat_id","name") VALUES ($1,'UBS Central') RETURNING "id"`,
     [sSaude['id']],
   );
-  const unInfra = await u(
+  // Unidade de Infraestrutura: o cenario de servidor de outra secretaria nao
+  // precisa da fila dessa unidade, apenas que a secretaria exista e tenha um
+  // vinculo valido apontando para ela.
+  await u(
     `INSERT INTO "units" ("secretariat_id","name") VALUES ($1,'Setur') RETURNING "id"`,
     [sInfra['id']],
   );
@@ -198,7 +202,9 @@ beforeAll(async () => {
   const protocol = new ProtocolService(ds);
   await protocol.ensureSequenceTable();
   openRequest = new OpenRequestService(ds, protocol);
-  authorization = new AuthorizationService(ds);
+  // O servico recebe o wrapper tipado, nao o `DataSource` cru. Envolver aqui
+  // mantem o teste com a mesma forma de dependencia da aplicacao.
+  authorization = new AuthorizationService(new Database(ds));
 }, 60_000);
 
 afterAll(async () => {

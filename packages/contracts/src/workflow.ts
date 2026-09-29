@@ -122,7 +122,7 @@ export const TRANSITION_RULES: Record<WorkflowCommand, TransitionRule> = {
 /** Transicoes validas a partir de um estado, para uso em testes e na interface. */
 export function allowedCommandsFrom(state: RequestState): WorkflowCommand[] {
   return (Object.keys(TRANSITION_RULES) as WorkflowCommand[]).filter((command) =>
-    (TRANSITION_RULES[command].from as readonly RequestState[]).includes(state),
+    TRANSITION_RULES[command].from.includes(state),
   );
 }
 
@@ -130,7 +130,7 @@ export function canTransition(
   state: RequestState,
   command: WorkflowCommand,
 ): boolean {
-  return (TRANSITION_RULES[command].from as readonly RequestState[]).includes(state);
+  return TRANSITION_RULES[command].from.includes(state);
 }
 
 export function targetStateFor(

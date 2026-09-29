@@ -17,7 +17,7 @@
  *    altera o registro original.
  */
 import { Injectable, Logger } from '@nestjs/common';
-import { DataSource, type EntityManager } from 'typeorm';
+import { DataSource } from 'typeorm';
 import {
   classifyIdempotencyLookup,
   hashRequestPayload,
@@ -33,6 +33,7 @@ import {
   TRANSITION_RULES,
 } from '@sertania/contracts';
 import { ProtocolService } from './protocol.service';
+import { Transaction } from '../database/typed-query';
 
 export interface OpenRequestInput {
   readonly citizenId: string;
@@ -98,10 +99,14 @@ export class OpenRequestService {
     }
 
     return this.dataSource.transaction(async (manager) => {
+      // A transacao usa o mesmo wrapper tipado do resto da aplicacao, para que
+      // o compilador continue protegendo o codigo depois do banco.
+      const tx = new Transaction(manager);
+
       // 1. Chave de idempotencia. A busca e feita dentro da transacao para
       //    que uma retentativa concorrente veja o registro.
       if (idempotencyKey !== undefined) {
-        const existing = await manager.query(
+        const existing = await tx.run(
           `SELECT "key", "request_hash", "result_entity_id", "expires_at"
              FROM "idempotency_keys"
             WHERE "user_id" = $1 AND "operation" = $2 AND "key" = $3
@@ -110,18 +115,15 @@ export class OpenRequestService {
         );
 
         if (existing.length > 0) {
-          const row = existing[0] as {
-            key: string;
-            request_hash: string;
-            result_entity_id: string | null;
-            expires_at: Date;
-          };
+          const row = existing[0];
+          if (row === undefined) throw new Error('Chave de idempotencia sem linha');
           const classification = classifyIdempotencyLookup({
             found: true,
-            storedHash: row.request_hash,
+            storedHash: row['request_hash'] as string,
             requestHash,
-            resultEntityId: row.result_entity_id,
-            expiresAt: new Date(row.expires_at),
+            resultEntityId: (row['result_entity_id'] as string | null) ?? null,
+            // O driver devolve `timestamptz` como texto, e nao como `Date`.
+            expiresAt: new Date(String(row['expires_at'])),
             now,
           });
 
@@ -135,7 +137,7 @@ export class OpenRequestService {
             return { outcome: 'IN_FLIGHT' };
           }
           if (classification.kind === 'REPLAY') {
-            const previous = await this.loadRequest(manager, classification.resultEntityId);
+            const previous = await this.loadRequest(tx, classification.resultEntityId);
             if (previous !== null) {
               this.logger.log(`Retentativa devolve o protocolo ${previous.protocol}`);
               return {
@@ -151,7 +153,7 @@ export class OpenRequestService {
           // sobrescrevemos a linha.
         }
 
-        await manager.query(
+        await tx.run(
           `INSERT INTO "idempotency_keys"
              ("user_id","operation","key","request_hash","expires_at","created_at")
            VALUES ($1,$2,$3,$4,$5, now())
@@ -165,12 +167,12 @@ export class OpenRequestService {
       }
 
       // 2. Protocolo, na mesma transacao do pedido.
-      const protocol = await this.protocol.nextProtocol(manager, now);
+      const protocol = await this.protocol.nextProtocol(tx, now);
       const requestId = newRequestId();
 
       // 3. Pedido. O estado inicial e SUBMITTED: o protocolo ja nasce no
       //    envio, e um rascunho nao recebe protocolo.
-      const inserted = await manager.query(
+      const inserted = await tx.run(
         `INSERT INTO "requests"
            ("id","protocol","citizen_id","created_by","channel","service_version_id",
             "secretariat_id","unit_id","state","classification","sla_policy_id",
@@ -196,7 +198,7 @@ export class OpenRequestService {
       );
 
       // 4. Conteudo. Descricao e respostas do formulario na versao congelada.
-      await manager.query(
+      await tx.run(
         `INSERT INTO "request_content" ("request_id","description","form_answers")
          VALUES ($1,$2,$3)`,
         [requestId, input.description, JSON.stringify(input.formAnswers)],
@@ -209,7 +211,7 @@ export class OpenRequestService {
           input.location.latitude !== undefined && input.location.longitude !== undefined
             ? `SRID=4326;POINT(${input.location.longitude} ${input.location.latitude})`
             : null;
-        await manager.query(
+        await tx.run(
           `INSERT INTO "request_locations"
              ("request_id","address_text","reference","locality","point",
               "precision_source","precision_meters")
@@ -227,7 +229,7 @@ export class OpenRequestService {
       }
 
       // 6. Ciclo de atendimento, para medir o tempo por ciclo.
-      await manager.query(
+      await tx.run(
         `INSERT INTO "request_cycles" ("request_id","cycle_number","started_at","from_reopen")
          VALUES ($1, 1, $2, false)`,
         [requestId, now],
@@ -235,7 +237,7 @@ export class OpenRequestService {
 
       // 7. Evento visivel ao cidadao. O primeiro texto precisa explicar o
       //    proximo passo, nao apenas dizer que o sistema recebeu.
-      await manager.query(
+      await tx.run(
         `INSERT INTO "request_events"
            ("request_id","actor_user_id","type","visibility","state_before","state_after",
             "public_text","cycle_number","created_at")
@@ -250,7 +252,7 @@ export class OpenRequestService {
 
       // 8. Outbox, na MESMA transacao. A falha de e-mail depois nao desfaz o
       //    protocolo ja confirmado.
-      await manager.query(
+      await tx.run(
         `INSERT INTO "outbox_events" ("type","payload","idempotency_key","created_at")
          VALUES ('REQUEST_RECEIVED', $1, $2, $3)`,
         [
@@ -262,36 +264,44 @@ export class OpenRequestService {
 
       // 9. Liga o resultado a chave, para a retentativa futura.
       if (idempotencyKey !== undefined) {
-        await manager.query(
+        await tx.run(
           `UPDATE "idempotency_keys" SET "result_entity_id" = $1
             WHERE "user_id" = $2 AND "operation" = $3 AND "key" = $4`,
           [requestId, input.citizenId, operation, idempotencyKey],
         );
       }
 
-      const row = inserted[0] as { id: string; protocol: string; state: RequestState };
+      const row = inserted[0];
+      if (row === undefined) throw new Error('Insercao de solicitacao nao devolveu linha');
       this.logger.log(`Solicitacao ${protocol} aberta para o cidadao ${input.citizenId}`);
 
       return {
         outcome: 'CREATED',
-        requestId: row.id,
-        protocol: row.protocol,
-        state: row.state,
+        requestId: row['id'] as string,
+        protocol: row['protocol'] as string,
+        state: row['state'] as RequestState,
         submittedAt: now,
       };
     });
   }
 
   private async loadRequest(
-    manager: EntityManager,
+    tx: Transaction,
     requestId: string,
   ): Promise<{ id: string; protocol: string; state: RequestState; submitted_at: Date } | null> {
-    const rows = await manager.query(
+    const rows = await tx.run(
       `SELECT "id","protocol","state","submitted_at" FROM "requests" WHERE "id" = $1`,
       [requestId],
     );
-    if (rows.length === 0) return null;
-    return rows[0] as { id: string; protocol: string; state: RequestState; submitted_at: Date };
+    const row = rows[0];
+    if (row === undefined) return null;
+    return {
+      id: row['id'] as string,
+      protocol: row['protocol'] as string,
+      state: row['state'] as RequestState,
+      // `timestamptz` volta como texto do driver.
+      submitted_at: new Date(String(row['submitted_at'])),
+    };
   }
 }
 

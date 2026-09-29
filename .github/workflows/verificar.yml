@@ -1,0 +1,107 @@
+# Fluxo local de verificacao.
+#
+# Nao copiar este arquivo para outro repositorio sem ajustar o caminho do
+# repositorio e as referencias de cache.
+name: verificar
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# Cancela execucao anterior do mesmo PR quando ha novo push.
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Portao rapida: nao precisa de servico nenhum para rodar.
+  estatico:
+    name: Tipos, lint e testes unitarios
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # A versao precisa casar com `packageManager` do package.json, senao a
+          # instalacao usa um pnpm diferente do que gerou o lockfile.
+          version: 12.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # `--frozen-lockfile` falha se o lockfile nao bater com o manifesto. E o
+      # que garante instalacao reproduzivel.
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Verificar tipos
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Testes unitarios
+        run: pnpm test:unit
+
+      - name: Build
+        run: pnpm build
+
+  # Portao lenta: precisa da stack real do item 18 da especificacao.
+  integracao:
+    name: Integracao com servicos reais
+    runs-on: ubuntu-latest
+    # Aplica migration e roda os testes de integracao, que exigem Postgres,
+    # Redis e S3 de verdade.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Subir a stack local
+        run: |
+          cp .env.example .env
+          docker compose -f infra/docker/docker-compose.yml --env-file .env up -d \
+            postgres redis-session redis-queue rustfs
+          # Espera o Postgres aceitar conexao, em vez de dormir por tempo fixo.
+          for tentativa in $(seq 1 30); do
+            if docker compose -f infra/docker/docker-compose.yml --env-file .env \
+                 exec -T postgres pg_isready -U sertania_app -d sertania >/dev/null 2>&1; then
+              echo "Postgres pronto"
+              break
+            fi
+            sleep 2
+          done
+          docker compose -f infra/docker/docker-compose.yml --env-file .env ps
+
+      - name: Aplicar migrations
+        run: pnpm db:migrate
+        env:
+          POSTGRES_USER: sertania_app
+          POSTGRES_PASSWORD: app-local-apenas
+          POSTGRES_MIGRATOR_USER: sertania_migrator
+          POSTGRES_MIGRATOR_PASSWORD: migrator-local-apenas
+
+      - name: Testes de integracao
+        run: pnpm test:integration
+
+      - name: Registros da execucao
+        if: always()
+        run: docker compose -f infra/docker/docker-compose.yml --env-file .env logs --no-color
+
+      - name: Derrubar a stack
+        if: always()
+        run: docker compose -f infra/docker/docker-compose.yml --env-file .env down -v

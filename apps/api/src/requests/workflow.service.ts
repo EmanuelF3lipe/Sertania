@@ -11,8 +11,8 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { Transaction, type Row } from '../database/typed-query';
 import {
-  TRANSITION_RULES,
   canTransition,
   isCompletionOutcome,
   targetStateFor,
@@ -21,7 +21,6 @@ import {
   type WorkflowCommand,
   VersionConflictError,
   OutcomeRequiredError,
-  IllegalTransitionError,
   REOPEN_REQUEST_WINDOW_DAYS,
   type InformationClassification,
 } from '@sertania/contracts';
@@ -81,6 +80,43 @@ interface RequestRow {
   readonly classification: InformationClassification;
 }
 
+/**
+ * Le um instante do banco.
+ *
+ * O driver devolve `timestamptz` como texto ISO, mas o tipo e `unknown` e
+ * poderia ser outra coisa. Um helper explicito deixa a conversao num lugar so
+ * e recusa valor inesperado, em vez de gerar `Invalid Date` em silencio.
+ */
+function instantOf(row: Row, key: string): Date | null {
+  const value = row[key];
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value;
+  if (typeof value !== 'string') {
+    throw new Error(`Coluna ${key} com tipo inesperado: ${typeof value}`);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Coluna ${key} com data invalida: ${value}`);
+  }
+  return parsed;
+}
+
+/** Converte a linha bruta do banco no tipo usado pelo caso de uso. */
+function toRequestRow(row: Row): RequestRow {
+  return {
+    id: row['id'] as string,
+    state: row['state'] as RequestState,
+    version: row['version'] as number,
+    submitted_at: instantOf(row, 'submitted_at'),
+    cycle_number: row['cycle_number'] as number,
+    completed_at: instantOf(row, 'completed_at'),
+    canceled_at: instantOf(row, 'canceled_at'),
+    outcome: (row['outcome'] as RequestOutcome | null) ?? null,
+    state_before_waiting: (row['state_before_waiting'] as RequestState | null) ?? null,
+    classification: row['classification'] as InformationClassification,
+  };
+}
+
 @Injectable()
 export class WorkflowService {
   private readonly logger = new Logger(WorkflowService.name);
@@ -97,10 +133,11 @@ export class WorkflowService {
   async apply(
     command: WorkflowCommand,
     context: TransitionContext,
-    mutate?: (manager: import('typeorm').EntityManager, request: RequestRow) => Promise<void>,
+    mutate?: (tx: Transaction, request: RequestRow) => Promise<void>,
   ): Promise<WorkflowOutcome> {
     return this.dataSource.transaction(async (manager) => {
-      const rows = await manager.query(
+      const tx = new Transaction(manager);
+      const rows = await tx.run(
         `SELECT "id","state","version","submitted_at","cycle_number","completed_at",
                 "canceled_at","outcome","state_before_waiting","classification"
            FROM "requests" WHERE "id" = $1 FOR UPDATE`,
@@ -110,7 +147,9 @@ export class WorkflowService {
       if (rows.length === 0) {
         return { ok: false, error: 'NOT_FOUND' };
       }
-      const request = rows[0] as RequestRow;
+      const raw = rows[0];
+      if (raw === undefined) return { ok: false, error: 'NOT_FOUND' };
+      const request = toRequestRow(raw);
 
       // Conflito de concorrencia: outra pessoa ja alterou este pedido.
       if (request.version !== context.expectedVersion) {
@@ -129,11 +168,9 @@ export class WorkflowService {
         return { ok: false, error: 'ILLEGAL_TRANSITION' };
       }
 
-      const rule = TRANSITION_RULES[command];
-
       // Acao especifica do comando, com os dados que ele exige.
       if (mutate !== undefined) {
-        await mutate(manager, request);
+        await mutate(tx, request);
       }
 
       // Campos derivados do destino. Conclusao e cancelamento tem exigencia
@@ -147,7 +184,9 @@ export class WorkflowService {
       // A virgula so entra quando existe campo derivado, para nao gerar
       // `SET "updated_at" = $2,` com nada depois.
       const derivedClause = extra.setClause === '' ? '' : `,\n                ${extra.setClause}`;
-      const updated = await manager.query(
+      // Escrita: usa `write`, nao `run`, porque o TypeORM devolve
+      // `[linhas, afetadas]` neste caso.
+      const [affectedRows, affectedCount] = await tx.write(
         `UPDATE "requests"
             SET "state" = $1,
                 "version" = "version" + 1,
@@ -163,25 +202,19 @@ export class WorkflowService {
         ],
       );
 
-      // `updated` tem formato `[rows, affectedCount]`: um UPDATE sem linha
-      // afetada devolve `[[], 0]`, e nao `[]`. Comparar `length` direto nunca
-      // seria zero, e o conflito passaria despercebido.
-      const [affectedRows, affectedCount] = updated as unknown as [
-        Array<{ state: RequestState; version: number }>,
-        number,
-      ];
-
+      // Um UPDATE sem linha afetada devolve `[[], 0]`. Sem checar os DOIS
+      // campos, o conflito passaria despercebido e a gravacao seria perdida.
       if (affectedCount === 0 || affectedRows.length === 0) {
         // Outra transacao alterou entre o SELECT e o UPDATE. A clausula de
         // versao impede a sobrescrita.
         throw new VersionConflictError(context.expectedVersion, request.version + 1);
       }
 
-      await this.recordEvent(manager, command, request, target, context);
+      await this.recordEvent(tx, command, request, target, context);
 
       // Ciclo fechado ao concluir ou cancelar.
       if (target === 'COMPLETED' || target === 'CANCELED') {
-        await manager.query(
+        await tx.run(
           `UPDATE "request_cycles"
               SET "closed_at" = $1
             WHERE "request_id" = $2 AND "cycle_number" = $3 AND "closed_at" IS NULL`,
@@ -192,14 +225,14 @@ export class WorkflowService {
       // Pausa de prazo: inicia ao pedir complementacao, encerra ao receber
       // resposta. Cada pausa registra inicio e fim (secao 8).
       if (command === 'REQUEST_INFORMATION') {
-        await manager.query(
+        await tx.run(
           `INSERT INTO "sla_pauses" ("request_id","state","started_at","reason","approved_by")
            VALUES ($1, 'WAITING_CITIZEN', $2, $3, $4)`,
           [context.requestId, context.now, context.reason ?? 'Aguardando informacao do cidadao', context.actorUserId],
         );
       }
       if (command === 'PROVIDE_INFORMATION') {
-        await manager.query(
+        await tx.run(
           `UPDATE "sla_pauses" SET "ended_at" = $1
             WHERE "request_id" = $2 AND "ended_at" IS NULL`,
           [context.now, context.requestId],
@@ -214,10 +247,12 @@ export class WorkflowService {
       if (result === undefined) {
         throw new Error('Atualizacao de estado nao devolveu linha');
       }
+      const newState = result['state'] as RequestState;
+      const newVersion = result['version'] as number;
       this.logger.log(
-        `${command}: ${context.requestId} ${request.state} -> ${result.state} (v${result.version})`,
+        `${command}: ${context.requestId} ${request.state} -> ${newState} (v${newVersion})`,
       );
-      return { ok: true, state: result.state, version: result.version };
+      return { ok: true, state: newState, version: newVersion };
     });
   }
 
@@ -291,13 +326,13 @@ export class WorkflowService {
   }
 
   private async recordEvent(
-    manager: import('typeorm').EntityManager,
+    tx: Transaction,
     command: WorkflowCommand,
     request: RequestRow,
     target: RequestState,
     context: TransitionContext,
   ): Promise<void> {
-    await manager.query(
+    await tx.run(
       `INSERT INTO "request_events"
          ("request_id","actor_user_id","type","visibility","state_before","state_after",
           "public_text","internal_note","reason","cycle_number","created_at")

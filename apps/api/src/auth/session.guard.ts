@@ -15,7 +15,7 @@ import {
   createParamDecorator,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 import {
   CsrfService,
   SessionService,
@@ -60,7 +60,6 @@ export class SessionGuard implements CanActivate {
     if (isPublic === true) return true;
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const response = context.switchToHttp().getResponse<Response>();
 
     const cookieName = '__Host-session';
     const raw = request.cookies?.[cookieName] as string | undefined;

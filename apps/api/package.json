@@ -10,6 +10,7 @@
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest",
     "test:unit": "jest",
     "test:integration": "jest --config ./test/jest-integration.config.js --runInBand",

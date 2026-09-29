@@ -17,13 +17,13 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
-import { DataSource } from 'typeorm';
+import type { Response } from 'express';
 import { API_ERROR_CODES, IDEMPOTENCY_HEADER, type RequestState } from '@sertania/contracts';
 import { OpenRequestService, type OpenRequestInput } from '../requests/open-request.service';
 import { WorkflowService } from '../requests/workflow.service';
 import { CurrentSession, Public, type AuthenticatedRequest } from '../auth/session.guard';
 import type { SessionClaims } from '../auth/session.service';
+import { Database } from '../database/typed-query';
 import { AuthorizationService } from '../authorization/authorization.service';
 import { actionForCommand, requiresOwnership } from '../authorization/command-permissions';
 
@@ -50,7 +50,7 @@ export class RequestsController {
   constructor(
     private readonly openRequest: OpenRequestService,
     private readonly workflow: WorkflowService,
-    private readonly dataSource: DataSource,
+    private readonly db: Database,
     private readonly authorization: AuthorizationService,
   ) {}
 
@@ -61,7 +61,7 @@ export class RequestsController {
     // fora do ar seria enganoso.
     let database = 'up';
     try {
-      await this.dataSource.query('SELECT 1');
+      await this.db.run('SELECT 1');
     } catch {
       database = 'down';
     }
@@ -143,7 +143,7 @@ export class RequestsController {
     const limit = Math.min(Math.max(Number(limitRaw ?? 20) || 20, 1), 100);
     const offset = Math.max(Number(offsetRaw ?? 0) || 0, 0);
 
-    const rows = await this.dataSource.query(
+    const rows = await this.db.run(
       `SELECT "id","protocol","state","submitted_at","completed_at","priority","cycle_number"
          FROM "requests"
         WHERE "citizen_id" = $1
@@ -151,13 +151,13 @@ export class RequestsController {
         LIMIT $2 OFFSET $3`,
       [session.userId, limit, offset],
     );
-    const count = await this.dataSource.query(
-      `SELECT count(*)::int AS total FROM "requests" WHERE "citizen_id" = $1`,
+    const total = await this.db.count(
+      `SELECT count(*)::int FROM "requests" WHERE "citizen_id" = $1`,
       [session.userId],
     );
 
     return {
-      items: rows.map((row: Record<string, unknown>) => ({
+      items: rows.map((row) => ({
         id: row['id'],
         protocol: row['protocol'],
         state: row['state'],
@@ -166,7 +166,7 @@ export class RequestsController {
         priority: row['priority'],
         cycleNumber: row['cycle_number'],
       })),
-      total: (count[0] as { total: number }).total,
+      total,
       limit,
       offset,
     };
@@ -212,7 +212,7 @@ export class RequestsController {
     const limiteParam = `$${params.length - 1}`;
     const offsetParam = `$${params.length}`;
 
-    const rows = await this.dataSource.query(
+    const rows = await this.db.run(
       `SELECT r."id", r."protocol", r."state", r."submitted_at", r."completed_at",
               r."priority", r."secretariat_id", r."unit_id", r."classification"
          FROM "requests" r
@@ -222,8 +222,8 @@ export class RequestsController {
         LIMIT ${limiteParam} OFFSET ${offsetParam}`,
       params,
     );
-    const count = await this.dataSource.query(
-      `SELECT count(*)::int AS total
+    const total = await this.db.count(
+      `SELECT count(*)::int
          FROM "requests" r
         WHERE r."secretariat_id" = ANY($1::uuid[])
           AND r."state" <> 'DRAFT'${filtroEstado}`,
@@ -231,7 +231,7 @@ export class RequestsController {
     );
 
     return {
-      items: rows.map((row: Record<string, unknown>) => ({
+      items: rows.map((row) => ({
         id: row['id'],
         protocol: row['protocol'],
         state: row['state'],
@@ -244,7 +244,7 @@ export class RequestsController {
         // restrito. O TEXTO do caso, nao.
         classification: row['classification'],
       })),
-      total: (count[0] as { total: number }).total,
+      total,
       limit,
       offset,
     };
@@ -289,7 +289,7 @@ export class RequestsController {
     });
     if (!decision.allowed) return {};
 
-    const rows = await this.dataSource.query(
+    const rows = await this.db.run(
       `SELECT r."id", r."protocol", r."state", r."submitted_at", r."completed_at",
               r."priority", r."cycle_number", r."version", r."secretariat_id", r."unit_id",
               r."classification", r."outcome", r."assignee_user_id",
@@ -304,7 +304,7 @@ export class RequestsController {
     // Linha do tempo: o cidadao ve SO o que e visivel a ele. O servidor ve
     // tambem as notas internas, e a separacao continua no DTO, e nao em CSS.
     const isServerView = !isOwner;
-    const events = await this.dataSource.query(
+    const events = await this.db.run(
       `SELECT "type","state_before","state_after","public_text","internal_note","visibility","created_at"
          FROM "request_events"
         WHERE "request_id" = $1
@@ -313,7 +313,8 @@ export class RequestsController {
       [id, isServerView],
     );
 
-    const row = rows[0] as Record<string, unknown>;
+    const row = rows[0];
+    if (row === undefined) return {};
     return {
       id: row['id'],
       protocol: row['protocol'],
@@ -329,7 +330,7 @@ export class RequestsController {
       unitId: row['unit_id'],
       assigneeUserId: isServerView ? row['assignee_user_id'] : null,
       description: row['description'],
-      timeline: events.map((e: Record<string, unknown>) => ({
+      timeline: events.map((e) => ({
         type: e['type'],
         from: e['state_before'],
         to: e['state_after'],
