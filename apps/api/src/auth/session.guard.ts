@@ -18,10 +18,11 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import {
   CsrfService,
+  isOriginAllowed,
+  SESSION_COOKIE_NAME,
   SessionService,
   type SessionClaims,
 } from './session.service';
-import { isOriginAllowed } from './session.service';
 import { API_ERROR_CODES } from '@sertania/contracts';
 
 /** Rotas que nao exigem sessao: saude, e o inicio do login. */
@@ -32,6 +33,20 @@ export const Public = (): MethodDecorator & ClassDecorator => SetMetadata(PUBLIC
 export interface AuthenticatedRequest extends Request {
   session?: SessionClaims;
   correlationId?: string;
+}
+
+/**
+ * Le um cookie como texto.
+ *
+ * O `Request` do Express declara `cookies` como `any`, e um `any` atravessando a
+ * aplicacao e o tipo de bug que passa pela revisao sem aparecer. Aqui o valor
+ * entra como `unknown` e so vira `string` depois de conferido: um cookie
+ * numerico, um array (o Express junta cookies repetidos com `,`) ou um objeto
+ * sao recusados, e nao propagados como se fossem texto.
+ */
+export function lerCookie(request: Request, nome: string): string | undefined {
+  const bruto: unknown = (request as { cookies?: Record<string, unknown> }).cookies?.[nome];
+  return typeof bruto === 'string' && bruto.length > 0 ? bruto : undefined;
 }
 
 /** Rotas que exigem token CSRF. Padrao: toda mutacao. */
@@ -61,8 +76,7 @@ export class SessionGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
 
-    const cookieName = '__Host-session';
-    const raw = request.cookies?.[cookieName] as string | undefined;
+    const raw = lerCookie(request, SESSION_COOKIE_NAME);
     const claims = await this.sessions.resolve(raw, Date.now());
 
     if (claims === null) {

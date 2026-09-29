@@ -15,23 +15,109 @@ Legenda:
 
 ## Resumo
 
-O backend executa contra a stack real. O Marco A esta fechado: autorizacao
-corrigida e testada pela cadeia HTTP, lint com regras de seguranca, suites
-separadas, CI configurada, e concorrencia testada de verdade.
+O backend executa contra a stack real. O **Marco A esta fechado** e o
+**Marco B (login real com Keycloak) esta implementado e verificado no
+navegador**, com uma ressalva importante na tabela abaixo.
 
-**204 testes passando.** Duas falhas de producao foram encontradas e corrigidas
-neste ciclo, ambas invisiveis para os testes anteriores.
+**216 testes passando.**
 
 | Pacote | Testes | Arquivos | Resultado |
 | --- | --- | --- | --- |
 | `@sertania/contracts` | 109 | 5 | passando |
-| `@sertania/api` (unitarios) | 55 | 4 | passando |
+| `@sertania/api` (unitarios) | 67 | 5 | passando |
 | `@sertania/api` (integracao, Postgres real) | 40 | 3 | passando |
-| **Total** | **204** | **12** | **passando** |
+| **Total** | **216** | **13** | **passando** |
 
 Gates: `pnpm lint` 0 problemas, `pnpm typecheck` 0 erros, `pnpm build` sem erro.
 
-## Duas falhas de producao encontradas neste ciclo
+## Marco B - Login real com Keycloak
+
+### O que foi verificado no navegador, de verdade
+
+Nao por fixture, nao por sessao injetada no Redis: um navegador de verdade,
+o formulario de login do Keycloak, e o Keycloak de verdade.
+
+| Passo | Evidencia |
+| --- | --- |
+| Inicio do login | `GET /api/v1/auth/login/cidadao` responde 302 para `http://localhost:8080/realms/sertania-ciudadanos/...` com `code_challenge_method=S256`, `state` e `nonce` |
+| Autenticacao real | Formulario do Keycloak aceitou `cidadao.a@exemplo.invalid`, e o navegador voltou para `http://localhost:5173/minhas-solicitacoes` |
+| Sessao criada | `GET /api/v1/auth/me` devolveu `{"authenticated":true,"isCitizen":true,"can":{"openRequest":true,...}}` |
+| Identidade no banco | `external_identities` com `realm = sertania-ciudadanos`, `subject` do token, e **zero** `memberships` |
+| Segundo fator exigido | Login de servidor para em `execution=CONFIGURE_TOTP`; o Keycloak **nao emite codigo** enquanto o segundo fator nao for configurado |
+| Portao da aplicacao | Token de servidor sem segundo fator foi recusado: redirecionou para `conta_bloqueada`, com log `MFA_AUSENTE ... metodos declarados no token: (nenhum)` |
+
+O ultimo item e defesa em profundidade verificada na pratica: mesmo com o
+Keycloak emitindo um token sem segundo fator, a aplicacao **nao** criou sessao
+de servidor.
+
+### O que NAO esta verificado
+
+- **O caminho de servidor COM segundo fator nao foi percorrido no navegador.** A
+  tela de entrada manual do TOTP do Keycloak 26.4 responde
+  `Ocorreu um erro interno no servidor` (erro de template FreeMarker no tema),
+  entao nao ha como configurar o segundo fator sem um aplicativo autenticador
+  de verdade. A regra que decide o que conta como prova de segundo fator esta
+  coberta por 8 testes unitarios em `apps/api/test/oidc.test.ts`, mas o
+  percurso completo navegador ate sessao de servidor **nao foi executado**.
+  Nao se pode afirmar que o login institucional completo funciona.
+
+### Decisoes do marco
+
+| Decisao | Motivo |
+| --- | --- |
+| Rotas separadas `/login/cidadao` e `/login/servidor` | O destino fica fixo na URL. Um parametro permitiria um link malicioso de trocar o tipo de acesso. |
+| `state` e `nonce` guardados no servidor | Guardados no navegador, um atacante com acesso ao storage fabricaria o par. |
+| `state` de uso unico | Reaproveitar um codigo interceptado trocaria a sessao de uma pessoa por outra. |
+| Codigo trocado no servidor (BFF) | Os tokens ficam fora do JavaScript do navegador. |
+| Vinculo institucional **nunca** nasce no login | Um servidor sem vinculo provisioned nao tem fila nenhuma. Cadastro publico so cria identidade de cidadao. |
+| Sessao rotacionada na troca de contexto | E mudanca de privilegio: um identificador capturado antes nao vale depois. |
+| Politica de segundo fator em `second-factor.ts`, nao no cliente OIDC | E regra de dominio, nao detalhe de biblioteca. E porque ela e testavel: `openid-client` e ESM puro e a suite unitaria roda em CommonJS. |
+| Realm provisionado por script versionado | Configuracao feita no console nao e reproduzivel. `infra/docker/keycloak/provisionar.mjs` e idempotente e tem modo `--verificar`. |
+
+### Cinco erros de producao encontrados neste marco
+
+Nenhum deles apareceria em teste de unidade. Todos apareceram por executar o
+caminho de verdade.
+
+1. **Descoberta OIDC no realm errado.** A descoberta usava a URL base do
+   servidor, que resolve para os metadados do realm `master` e para as contas
+   de administracao do Keycloak. O emissor do realm precisa ser montado antes
+   de qualquer chamada de rede.
+
+2. **`redirect_uri` com a origem errada.** A URL de callback era montada com a
+   origem do Keycloak, e a biblioteca deriva o `redirect_uri` da URL que recebe
+   a troca. O provedor recusava com `invalid_grant: Incorrect redirect_uri`.
+   Agora a origem vem da configuracao, nunca da requisicao: um `Host`
+   adulterado assim nao define para onde o token e entregue.
+
+3. **Login institucional recusado como `sessao_invalida`.** O callback
+   determinava o realm por `request.query['realm']`, que o Keycloak nunca
+   envia. Todo login de servidor era tratado como login de cidadao. O realm do
+   fluxo vem do `state` guardado, que e a unica fonte confiavel.
+
+4. **Falha sem log.** O `catch` do inicio do login redirecionava sem registrar
+   nada: um erro de configuracao aparecia apenas como "login nao funciona".
+   Agoram o log percorre a cadeia de `cause`, que e onde a biblioteca deixa a
+   resposta real do provedor.
+
+5. **Required action corrompido pela propria API.** Um `PUT` parcial em
+   `/required-actions/CONFIGURE_TOTP`, sem o campo `alias`, zerou o alias. A
+   partir dai a acao ficou inacessivel por GET, PUT e DELETE, porque toda a API
+   a localiza pelo alias. Registros assim so saem junto com o realm. O script de
+   provisionamento envia a representacao completa e detecta registro sem alias.
+
+### Duas armadilhas de ambiente configuration
+
+| Achado | Consequencia se nao corrigido |
+| --- | --- |
+| `SESSION_COOKIE_SECURE=false` chega ao `ConfigService` como a **string** `"false"`, que e truthy | A configuracao real ficava invertida sem nenhum aviso |
+| Um cookie com prefixo `__Host-` e **descartado** pelo navegador se nao tiver `Secure` | O login "funciona", o navegador nao guarda o cookie, e a pessoa volta para a tela de entrada. O `Secure` passou a ser derivado do prefixo, e a variavel de ambiente nao pode mais desligar o que o navegador exige. |
+
+O nome do cookie saiu do ambiente: o prefixo `__Host-` e uma regra do
+navegador, e o mesmo nome precisa bater entre o guard (que le) e o controller
+(que escreve). Uma variavel de meio valor seria pior que nenhuma.
+
+## Duas falhas de producao encontradas no Marco A
 
 ### 1. Qualquer cidadao autenticado podia executar comando de atendimento
 
@@ -170,7 +256,8 @@ dois que produziu o `state` indefinido descrito adiante.
 - [x] Tabela de transicoes, controle de concorrencia por versao
 - [x] Outbox gravada na mesma transacao do pedido
 - [x] Politica de arquivos por assinatura de magic bytes
-- [ ] Rotas OIDC
+- [x] Rotas OIDC: login de cidadao e de servidor, callback, `/me`, troca de
+      contexto, logout local e logout do provedor
 
 ## Etapa 3 - Atendimento completo
 
@@ -187,8 +274,17 @@ dois que produziu o `state` indefinido descrito adiante.
 
 ## O que ainda NAO tem evidencia de execucao
 
-- **Login OIDC pelo navegador.** As sessoes funcionam, mas nos testes sao
-  criadas por injecao no Redis. Isso e fixture, nao evidencia de login.
+- **Login institucional completo, com segundo fator percorrido no navegador.** O
+  realm exige o segundo fator e a aplicacao recusa token sem ele, ambos
+  verificados. O que falta e o percurso inteiro: a tela de entrada manual do
+  TOTP do Keycloak 26.4 responde erro interno, entao nao da para configurar o
+  segundo fator sem um aplicativo autenticador de verdade. A regra esta
+  testada; o caminho completo nao foi executado.
+- **Banco de dados dedicado para os testes de integracao.** Hoje eles usam o
+  mesmo banco `sertania` das demonstracoes locais e apagam o conteudo. Um
+  `pnpm test:integration` destroyindo os dados de quem esta desenvolvendo a
+  interface e um risco operacional real. O documento exige banco dedicado, e
+  isto ainda nao foi feito.
 - **Upload e download de anexos pelo endpoint.** Politica e cliente de
   antivirus existem e estao testados; nao ha controller nem fluxo de
   quarentena ate liberacao.

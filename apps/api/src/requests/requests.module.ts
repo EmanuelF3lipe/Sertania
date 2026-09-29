@@ -10,16 +10,13 @@ import { RequestsController } from './requests.controller';
 import { OpenRequestService } from './open-request.service';
 import { WorkflowService } from './workflow.service';
 import { ProtocolService } from './protocol.service';
-import { Database } from '../database/typed-query';
-import { AuthorizationService } from '../authorization/authorization.service';
 
 /**
  * Modulo de solicitacoes.
  *
- * `Database` e `AuthorizationService` sao providos AQUI e nao no modulo global:
- * pertencem ao dominio e dependem do `DataSource`, que o modulo global
- * configura. Disponibiliza-los como provider separado mantem o modulo de
- * autorizacao reutilizavel por outros modulos de dominio.
+ * `Database` e `AuthorizationService` vem do modulo global de infraestrutura,
+ * que ja os registra. Declara-los aqui criaria uma segunda instancia de cada
+ * um, com um segundo pool de conexoes e uma segunda leitura de vinculos.
  */
 @Module({
   controllers: [RequestsController],
@@ -27,15 +24,11 @@ import { AuthorizationService } from '../authorization/authorization.service';
     OpenRequestService,
     WorkflowService,
     ProtocolService,
-    Database,
-    AuthorizationService,
   ],
   exports: [
     OpenRequestService,
     WorkflowService,
     ProtocolService,
-    Database,
-    AuthorizationService,
   ],
 })
 export class RequestsModule {}

@@ -12,6 +12,17 @@
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 
+/**
+ * Nome do cookie de sessao.
+ *
+ * Fixo no codigo, e nao em variavel de ambiente, por tres razoes: o prefixo
+ * `__Host-` e uma regra do navegador, e nao uma escolha de nome; o nome precisa
+ * bater entre o guard, que LE o cookie, e o controller, que o ESCREVE; e um
+ * nome configuravel permitiria trocar `__Host-` por um nome comum, perdendo a
+ * garantia de que nenhum subdominio leia o cookie, sem nenhum aviso.
+ */
+export const SESSION_COOKIE_NAME = '__Host-session';
+
 export interface SessionClaims {
   /** Usuario interno resolvido na autenticacao. */
   readonly userId: string;
@@ -230,7 +241,7 @@ export class SessionService {
  *
  * Exigido em mutacoes autenticadas por cookie, junto da conferencia de
  * Origin. Sem os dois, um site externo poderia acionar uma acao com a sessao
- * da vítima.
+ * da vitima.
  */
 @Injectable()
 export class CsrfService {

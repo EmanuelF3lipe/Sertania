@@ -5,6 +5,8 @@
  * ausente. Este modulo exige as variaveis que a aplicacao realmente usa e
  * recusa valores de demonstracao fora do ambiente local.
  */
+import { SESSION_COOKIE_NAME } from '../auth/session.service';
+
 /** Forma do objeto que o ConfigModule entrega apos a validacao. */
 type ValidatedEnvironment = Record<string, string | undefined>;
 
@@ -170,7 +172,10 @@ export function configuration(): Record<string, unknown> {
     sessionSecret: process.env['SESSION_SECRET'],
     sessionIdleTtlSeconds: Number(process.env['SESSION_IDLE_TTL_SECONDS'] ?? '1200'),
     sessionAbsoluteTtlSeconds: Number(process.env['SESSION_ABSOLUTE_TTL_SECONDS'] ?? '28800'),
-    sessionCookieName: process.env['SESSION_COOKIE_NAME'] ?? '__Host-session',
+    // O nome do cookie vem do codigo, nao do ambiente: o prefixo `__Host-` e
+    // uma regra do navegador, e o mesmo nome precisa ser usado pelo guard (que
+    // le) e pelo controller (que escreve). Ver `SESSION_COOKIE_NAME`.
+    sessionCookieName: SESSION_COOKIE_NAME,
     sessionCookieSecure: process.env['SESSION_COOKIE_SECURE'] === 'true',
     keycloakUrl: process.env['KEYCLOAK_URL'],
     keycloakRealmCitizens: process.env['KEYCLOAK_REALM_CITIZENS'],

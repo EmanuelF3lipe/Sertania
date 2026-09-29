@@ -268,26 +268,42 @@ describe('A3: concorrencia em comando de estado', () => {
       }),
     ]);
 
-    // Exatamente um aplica; o outro e impedido. A ordem depende de qual
-    // transacao ganha o lock, entao o teste nao presume quem vence.
-    const concretizados = [um, dois].filter((r) => r.status === 'fulfilled');
-    const impedidos = [um, dois].filter((r) => r.status === 'rejected');
-    expect(concretizados).toHaveLength(1);
+    // Exatamente um aplica; o outro e impedido.
+    //
+    // "Aplicou" nao e "a promessa foi cumprida". Um comando recusado por estado
+    // responde `ok: false` e a promessa cumpre normalmente: classificar por
+    // `status` trataria a recusa como sucesso, e o teste passaria a falhar
+    // conforme a ordem das transacoes. Quem aplicou tem `ok: true`.
+    const aplicados = [um, dois].filter(
+      (r) => r.status === 'fulfilled' && r.value.ok === true,
+    );
+    const impedidos = [um, dois].filter(
+      (r) => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.ok === false),
+    );
+    expect(aplicados).toHaveLength(1);
     expect(impedidos).toHaveLength(1);
 
-    // O perdedor recebe uma recusa explicita: conflito de versao, ou estado
-    // invalido para o comando. O que nao pode acontecer e o perdedor ter
-    // aplicado por cima da versao nova.
-    const motivo = (impedidos[0] as PromiseRejectedResult).reason;
-    const resultado = concretizados[0] as PromiseFulfilledResult<
-      { ok: boolean; state?: string } | { ok: false; error: string }
-    >;
-
-    if (motivo !== undefined) {
-      expect(motivo).toBeInstanceOf(VersionConflictError);
-    } else {
-      // Se nao houve excecao, o perdedor retornou `ok: false` por estado.
-      expect(resultado.value).toEqual({ ok: false, error: 'ILLEGAL_TRANSITION' });
+    // A recusa do perdedor tem duas formas legitimas, e o teste nao presume
+    // qual delas vai acontecer:
+    //
+    // - `VersionConflictError`, quando a segunda transacao acorda do lock e ve
+    //   a versao ja incrementada;
+    // - `ILLEGAL_TRANSITION`, quando ela acorda e le o estado NOVO, onde o
+    //   comando ja nao faz sentido. Isso e correto: `START_REVIEW` duas vezes
+    //   seguidas e uma transicao invalida de verdade.
+    //
+    // O que nao pode acontecer e o perdedor ter aplicado por cima da versao
+    // nova, e isso e verificado pelos dois asserts abaixo: a versao subiu uma
+    // vez, e existe um evento.
+    // Percorre em vez de indexar: `expect(...).toHaveLength(1)` nao estreita o
+    // tipo do array para o TypeScript, e `impedidos[0]` continuaria
+    // possivelmente indefinido para o compilador.
+    for (const perdedor of impedidos) {
+      if (perdedor.status === 'rejected') {
+        expect(perdedor.reason).toBeInstanceOf(VersionConflictError);
+      } else {
+        expect(perdedor.value).toEqual({ ok: false, error: 'ILLEGAL_TRANSITION' });
+      }
     }
 
     // A versao subiu UMA vez. Este e o assert que distingue concorrencia de

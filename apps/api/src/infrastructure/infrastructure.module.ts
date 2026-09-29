@@ -10,6 +10,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import Redis from 'ioredis';
 import { entities } from '../database/entities';
 import { ProtocolService } from '../requests/protocol.service';
+import { Database } from '../database/typed-query';
+import { AuthorizationService } from '../authorization/authorization.service';
 import { RedisSessionStore, createRedisClient } from '../auth/redis-session.store';
 import { SessionService, CsrfService } from '../auth/session.service';
 import { S3StorageClient, type StorageConfig } from '../storage/s3-storage.client';
@@ -91,6 +93,13 @@ import { ClamAvClient, type ClamAvConfig } from '../storage/clamav.client';
         } satisfies ClamAvConfig),
     },
     ProtocolService,
+    // `Database` e `AuthorizationService` ficam AQUI, e nao em cada modulo de
+    // dominio, porque sao `@Injectable` com estado: cada registro de provider
+    // cria uma instancia nova, ou seja, um segundo pool de conexoes e uma
+    // segunda leitura de vinculos. Este modulo e global e configura o
+    // `DataSource`, entao e o lugar natural para as duas.
+    Database,
+    AuthorizationService,
   ],
   exports: [
     TypeOrmModule,
@@ -101,6 +110,8 @@ import { ClamAvClient, type ClamAvConfig } from '../storage/clamav.client';
     S3StorageClient,
     ClamAvClient,
     ProtocolService,
+    Database,
+    AuthorizationService,
   ],
 })
 export class InfrastructureModule {}
