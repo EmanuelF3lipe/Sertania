@@ -421,3 +421,38 @@ estava correto e a diferenca estava em um campo que o script nao escrevia.
 que existe com o que deveria existir e sai com codigo diferente de zero. Da
 para colocar em CI sem risco, e ele conta uma historia diferente da que a
 suite de teste conta.
+
+---
+
+## 14. `maxAge` do Express nao esta na mesma unidade do TTL do Redis
+
+**Sintoma.** O login funcionava, a interface carregava o catalogo, mas uma
+mutacao seguinte recebia `401`. O sintoma parecia perda de sessao ou problema
+de CSRF.
+
+**O que era.** O Redis mantinha a sessao por horas, mas o cookie era criado com
+`maxAge: 8 * 60 * 60`. O Express interpreta `maxAge` em milissegundos, então o
+navegador removia o cookie depois de 28,8 segundos. O servidor e o navegador
+discordavam sobre a vida da mesma sessao.
+
+**Aprendizado.** Ao configurar tempos em camadas diferentes, confirme a unidade
+de cada biblioteca. O valor agora e `8 * 60 * 60 * 1000`, e o teste real voltou
+a manter `/me`, CSRF e POST funcionando na mesma sessão.
+
+---
+
+## 15. CSRF precisa de um caminho para a interface, sem tornar a mutacao publica
+
+**Sintoma.** O botão de enviar não produzia um pedido válido: a guarda exigia
+`X-CSRF-Token`, mas o cookie de sessão era HttpOnly e a interface não tinha de
+onde ler o token derivado dele.
+
+**O que era.** A proteção estava correta, mas o contrato de leitura estava
+faltando. Um endpoint autenticado não resolvia o caso quando a sessão do
+navegador expirava; um endpoint sem proteção que aceitasse a mutação seria pior.
+
+**Aprendizado.** O token de leitura pode ser público quando ele apenas calcula um
+HMAC do cookie enviado pelo navegador, desde que a mutação continue exigindo
+sessão válida, Origin permitido e conferência do HMAC. `GET /auth/csrf` devolve
+somente esse valor e não altera estado; `POST` continua protegido. O cliente
+mantém o token apenas em memória e o apaga ao sair ou trocar contexto.

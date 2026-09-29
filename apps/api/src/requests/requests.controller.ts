@@ -18,7 +18,14 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { API_ERROR_CODES, IDEMPOTENCY_HEADER, type RequestState } from '@sertania/contracts';
+import {
+  API_ERROR_CODES,
+  CITIZEN_STATE_TEXT,
+  IDEMPOTENCY_HEADER,
+  allowedCommandsFrom,
+  type RequestOutcome,
+  type RequestState,
+} from '@sertania/contracts';
 import { OpenRequestService, type OpenRequestInput } from '../requests/open-request.service';
 import { WorkflowService } from '../requests/workflow.service';
 import { CurrentSession, Public, type AuthenticatedRequest } from '../auth/session.guard';
@@ -144,10 +151,13 @@ export class RequestsController {
     const offset = Math.max(Number(offsetRaw ?? 0) || 0, 0);
 
     const rows = await this.db.run(
-      `SELECT "id","protocol","state","submitted_at","completed_at","priority","cycle_number"
-         FROM "requests"
-        WHERE "citizen_id" = $1
-        ORDER BY "created_at" DESC
+      `SELECT r."id",r."protocol",r."state",r."submitted_at",r."completed_at",r."priority",r."cycle_number",
+              r."created_at",sec."name" AS "secretariat_name",sv."name" AS "service_name"
+         FROM "requests" r
+         JOIN "secretariats" sec ON sec."id" = r."secretariat_id"
+         JOIN "service_versions" sv ON sv."id" = r."service_version_id"
+        WHERE r."citizen_id" = $1
+        ORDER BY r."created_at" DESC
         LIMIT $2 OFFSET $3`,
       [session.userId, limit, offset],
     );
@@ -161,6 +171,11 @@ export class RequestsController {
         id: row['id'],
         protocol: row['protocol'],
         state: row['state'],
+        stateText: CITIZEN_STATE_TEXT[row['state'] as RequestState],
+        serviceName: row['service_name'],
+        secretariatName: row['secretariat_name'],
+        createdAt: row['created_at'],
+        dueAt: null,
         submittedAt: row['submitted_at'],
         completedAt: row['completed_at'],
         priority: row['priority'],
@@ -214,8 +229,12 @@ export class RequestsController {
 
     const rows = await this.db.run(
       `SELECT r."id", r."protocol", r."state", r."submitted_at", r."completed_at",
-              r."priority", r."secretariat_id", r."unit_id", r."classification"
+              r."priority", r."secretariat_id", r."unit_id", r."classification",
+              r."created_at", r."version", sv."name" AS "service_name",
+              sec."name" AS "secretariat_name"
          FROM "requests" r
+         JOIN "service_versions" sv ON sv."id" = r."service_version_id"
+         JOIN "secretariats" sec ON sec."id" = r."secretariat_id"
         WHERE r."secretariat_id" = ANY($1::uuid[])
           AND r."state" <> 'DRAFT'${filtroEstado}
         ORDER BY r."created_at" DESC
@@ -235,6 +254,12 @@ export class RequestsController {
         id: row['id'],
         protocol: row['protocol'],
         state: row['state'],
+        stateText: CITIZEN_STATE_TEXT[row['state'] as RequestState],
+        serviceName: row['service_name'],
+        citizenName: null,
+        createdAt: row['created_at'],
+        dueAt: null,
+        version: row['version'],
         submittedAt: row['submitted_at'],
         completedAt: row['completed_at'],
         priority: row['priority'],
@@ -292,10 +317,13 @@ export class RequestsController {
     const rows = await this.db.run(
       `SELECT r."id", r."protocol", r."state", r."submitted_at", r."completed_at",
               r."priority", r."cycle_number", r."version", r."secretariat_id", r."unit_id",
-              r."classification", r."outcome", r."assignee_user_id",
-              c."description"
-         FROM "requests" r
-         LEFT JOIN "request_content" c ON c."request_id" = r."id"
+               r."classification", r."outcome", r."assignee_user_id", r."created_at",
+               c."description", sv."name" AS "service_name", sv."guidance",
+               sv."requires_representation", sec."name" AS "secretariat_name"
+          FROM "requests" r
+          LEFT JOIN "request_content" c ON c."request_id" = r."id"
+          JOIN "service_versions" sv ON sv."id" = r."service_version_id"
+          JOIN "secretariats" sec ON sec."id" = r."secretariat_id"
         WHERE r."id" = $1`,
       [id],
     );
@@ -319,7 +347,14 @@ export class RequestsController {
       id: row['id'],
       protocol: row['protocol'],
       state: row['state'],
+      stateText: CITIZEN_STATE_TEXT[row['state'] as RequestState],
+      serviceName: row['service_name'],
+      guidance: row['guidance'],
+      secretariatName: row['secretariat_name'],
       submittedAt: row['submitted_at'],
+      createdAt: row['created_at'],
+      dueAt: null,
+      dueAtText: 'Prazo em acompanhamento',
       completedAt: row['completed_at'],
       priority: row['priority'],
       cycleNumber: row['cycle_number'],
@@ -330,6 +365,8 @@ export class RequestsController {
       unitId: row['unit_id'],
       assigneeUserId: isServerView ? row['assignee_user_id'] : null,
       description: row['description'],
+      requiresRepresentation: row['requires_representation'],
+      allowedCommands: isServerView ? allowedCommandsFrom(row['state'] as RequestState) : [],
       timeline: events.map((e) => ({
         type: e['type'],
         from: e['state_before'],
@@ -428,16 +465,24 @@ export class RequestsController {
       return { ok: false, error: API_ERROR_CODES.FORBIDDEN };
     }
 
+    const transitionContext = {
+      requestId: id,
+      expectedVersion: body.expectedVersion,
+      actorUserId: session.userId,
+      now,
+      publicText: body.publicText,
+      reason: body.reason ?? null,
+      ...(body.outcome !== undefined
+        ? {
+            outcome: body.outcome as RequestOutcome,
+            justification: body.justification ?? '',
+          }
+        : {}),
+    };
+
     const result = await this.workflow.apply(
       command as Parameters<WorkflowService['apply']>[0],
-      {
-        requestId: id,
-        expectedVersion: body.expectedVersion,
-        actorUserId: session.userId,
-        now,
-        publicText: body.publicText,
-        reason: body.reason ?? null,
-      },
+      transitionContext,
     );
 
     if (!result.ok) return { ok: false, error: result.error };

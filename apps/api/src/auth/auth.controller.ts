@@ -290,7 +290,10 @@ export class AuthController {
       path: '/',
       // Duracao maxima da sessao. Depois disso o servidor recusa, mesmo com o
       // cookie ainda no navegador.
-      maxAge: 8 * 60 * 60,
+      // Express interpreta `maxAge` em milissegundos. Passar segundos aqui
+      // fazia o cookie expirar em 28,8 segundos, embora a sessao no Redis
+      // continuasse valida por horas; a interface parecia deslogar sozinha.
+      maxAge: 8 * 60 * 60 * 1000,
     });
   }
 
@@ -437,6 +440,21 @@ export class AuthController {
       nomes.set(linha['id'] as string, linha['name'] as string);
     }
     return nomes;
+  }
+
+  /**
+   * Token CSRF da sessao atual.
+   *
+   * O token nao e segredo; ele e derivado do identificador HttpOnly da sessao.
+   * A interface precisa deste endpoint porque nao pode ler `__Host-session`.
+   */
+  @Get('csrf')
+  @Public()
+  @CsrfExempt()
+  csrfToken(@Req() request: AuthenticatedRequest): { token: string } {
+    const raw = lerCookie(request, SESSION_COOKIE_NAME);
+    const sessionId = raw?.split('.')[0] ?? '';
+    return { token: sessionId === '' ? '' : this.csrf.tokenFor(sessionId) };
   }
 
   /**

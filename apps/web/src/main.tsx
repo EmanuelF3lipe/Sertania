@@ -27,6 +27,7 @@ import {
   TelaEntrada,
   formatarData,
 } from './telas/cidadao';
+import { AreaOperacao } from './telas/operacao';
 import './estilos.css';
 
 const elemento = document.getElementById('raiz');
@@ -68,9 +69,6 @@ function Aplicacao() {
   const cidadao = fase === 'cidadao';
   const pode = sessao?.can;
 
-  // O servidor institucional ve a fila; a tela dele ainda nao foi construida
-  // neste marco, e a interface diz isso em vez de mostrar um espaco vazio que
-  // parece defeito.
   if (!cidadao) {
     return (
       <>
@@ -81,18 +79,7 @@ function Aplicacao() {
           podeVerFila={pode?.viewQueue ?? false}
           sair={sair}
         />
-        <main className="conteudo" id="conteudo">
-          <h2>Fila da secretaria</h2>
-          <p>
-            A tela da fila institucional ainda nao foi construida. O que ja funciona:
-            autenticacao com segundo fator, selecao de contexto e as rotas de fila,
-            pedido e comandos na API, com 40 testes de integracao.
-          </p>
-          <p className="dica">
-            Contexto atual: {sessao?.contexts[0]?.secretariatName ?? 'sem contexto'} -{' '}
-            {sessao?.contexts[0]?.roles.join(', ') ?? 'sem funcao'}
-          </p>
-        </main>
+        <main className="conteudo" id="conteudo"><AreaOperacao rota={rota} /></main>
       </>
     );
   }

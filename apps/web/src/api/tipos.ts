@@ -101,6 +101,7 @@ export interface PedidoOperacao {
   readonly citizenName: string | null;
   readonly classification: string;
   readonly createdAt: string;
+  readonly submittedAt?: string | null;
   readonly dueAt: string | null;
   readonly version: number;
 }

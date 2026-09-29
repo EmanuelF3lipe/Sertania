@@ -24,9 +24,9 @@ const BASE = (import.meta.env['VITE_API_URL'] as string | undefined) ?? '';
 /** Cabecalho de idempotencia. O nome vem do contrato, e nao de uma constante solta. */
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
 
-/** Cabecalho de CSRF. O valor e lido do cookie legivel e conferido no servidor. */
+/** Cabecalho de CSRF. O valor e obtido pela rota vinculada a sessao. */
 const CSRF_HEADER = 'X-CSRF-Token';
-const CSRF_COOKIE = '__Host-csrf';
+let csrfEmMemoria: string | null = null;
 
 /** Erro de API com o codigo estavel do contrato. */
 export class ErroApi extends Error {
@@ -58,20 +58,18 @@ export class ErroApi extends Error {
   }
 }
 
-/**
- * Le o token de CSRF do cookie.
- *
- * O cookie existe justamente para ser legivel pelo JavaScript. Ele NAO e
- * segredo: e um valor que liga a requisicao a sessao, e o guarda no servidor
- * exige que ele esteja na sessao ativa.
- */
-function lerCsrf(): string {
-  const partes = document.cookie.split(';');
-  for (const parte of partes) {
-    const [chave, ...resto] = parte.trim().split('=');
-    if (chave === CSRF_COOKIE) return decodeURIComponent(resto.join('='));
-  }
-  return '';
+async function tokenCsrf(): Promise<string> {
+  if (csrfEmMemoria !== null) return csrfEmMemoria;
+  const resposta = await fetch(`${BASE}/api/v1/auth/csrf`, {
+    credentials: 'include',
+    cache: 'no-store',
+    headers: { Accept: 'application/json' },
+  });
+  if (!resposta.ok) return '';
+  const corpo = (await resposta.json()) as { token?: unknown };
+  const token = typeof corpo.token === 'string' ? corpo.token : '';
+  if (token !== '') csrfEmMemoria = token;
+  return token;
 }
 
 interface RespostaApi<T> {
@@ -87,7 +85,7 @@ async function pedir<T>(caminho: string, init: RequestInit = {}): Promise<Respos
   headers.set('Accept', 'application/json');
   if (init.body !== undefined) headers.set('Content-Type', 'application/json');
   if (precisaCsrf) {
-    const token = lerCsrf();
+    const token = await tokenCsrf();
     if (token !== '') headers.set(CSRF_HEADER, token);
   }
 
@@ -95,6 +93,7 @@ async function pedir<T>(caminho: string, init: RequestInit = {}): Promise<Respos
     ...init,
     headers,
     credentials: 'include',
+    cache: 'no-store',
   });
 
   const texto = await resposta.text();
@@ -137,4 +136,9 @@ export function apiPost<T>(caminho: string, corpo: unknown, cabecalhos?: Record<
       ? { method: 'POST', body: JSON.stringify(corpo) }
       : { method: 'POST', body: JSON.stringify(corpo), headers: cabecalhos },
   ).then((r) => r.corpo);
+}
+
+/** Limpa dados efemeros ao sair ou trocar o contexto. */
+export function limparCacheDeSessao(): void {
+  csrfEmMemoria = null;
 }

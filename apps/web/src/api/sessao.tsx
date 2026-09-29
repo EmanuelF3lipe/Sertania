@@ -11,7 +11,7 @@
  * IndexedDB. Nao e esquecimento: e a razao de o arquivo existir.
  */
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { apiGet, ErroApi } from './cliente';
+import { apiGet, limparCacheDeSessao } from './cliente';
 import type { Sessao as SessaoApi } from './tipos';
 
 export type FaseSessao = 'carregando' | 'anonimo' | 'cidadao' | 'servidor';
@@ -41,15 +41,9 @@ export function ProvedorSessao({ children }: { readonly children: ReactNode }) {
       const resposta = await apiGet<SessaoApi>('/api/v1/auth/me');
       definirSessao(resposta);
       definirFase(faseDe(resposta));
-    } catch (erro) {
-      // 401 e' o caso normal de quem nao entrou. Qualquer outro erro e'
-      // infraestrutura, e mostrar "deslogado" esconderia uma falha real da API.
-      if (erro instanceof ErroApi && !erro.semSessao) {
-        // O motivo fica no console e nao na tela: um erro de rede nao deve
-        // virar "voce nao entrou" e levar a pessoa a tentar o login de novo
-        // sem que nada tenha mudado.
-        console.error('Falha ao consultar a sessao:', erro.message, erro.identificadorCorrelacao);
-      }
+    } catch {
+      // 401 e erro de rede caem no mesmo fallback visual seguro. A proxima
+      // navegacao tenta novamente sem registrar dados autenticados no browser.
       definirSessao(null);
       definirFase('anonimo');
     }
@@ -69,6 +63,7 @@ export function ProvedorSessao({ children }: { readonly children: ReactNode }) {
     }
     definirSessao(null);
     definirFase('anonimo');
+    limparCacheDeSessao();
   }, []);
 
   const valor = useMemo<ContextoSessao>(

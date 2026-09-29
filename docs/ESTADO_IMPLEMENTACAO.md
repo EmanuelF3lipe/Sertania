@@ -33,7 +33,8 @@ Gates: `pnpm lint` 0 problemas, `pnpm typecheck` 0 erros, `pnpm build` sem erro.
 ## Marco C - Interface (incompleto)
 
 `apps/web` existe, com Vite, React e TypeScript no mesmo rigor da API. O fluxo do
-cidadao foi construido e verificado no navegador ate a tela de revisao.
+cidadao e a primeira versao da area institucional foram construidos. A identidade
+visual foi refeita para branco, azul-ciano e azul-marinho.
 
 ### Verificado no navegador, com login real
 
@@ -44,19 +45,37 @@ cidadao foi construido e verificado no navegador ate a tela de revisao.
 | Estado vazio | "Voce ainda nao tem nenhuma solicitacao", com atalho para abrir a primeira |
 | Catalogo | As tres secretarias e os tres servicos vindos de `GET /catalog`, com o prazo em texto e o aviso de prazo simulado |
 | Assistencia | Passos 1 a 4, escolha de servico, descricao com validacao minima, e revisao com secretaria, servico, prazo e descricao |
+| Envio real | POST protegido por CSRF retornou 201 e protocolo `SER-2026-002064`; a lista e o detalhe retornaram o pedido sem nota interna |
+| Visual | Navegador renderizou a nova identidade branca/ciano e os estados responsivos |
 
 ### O que NAO esta verificado
 
-- **O envio da solicitacao nao chegou a ser executado.** A tela de revisao
-  mostra os dados corretos e o botao esta habilitado, mas o clique nao produziu
-  nenhuma requisicao: o log da API nao registra POST em `/requests`. A causa
-  **nao foi diagnosticada**. Nao se pode afirmar que a abertura de pedido
-  funciona pela interface.
-- **Tela da fila institucional, do detalhe do servidor e dos comandos.** A
-  interface mostra, para quem entra como servidor, um aviso honesto de que a
-  tela ainda nao foi construida. As rotas existem e tem 40 testes de integracao.
+- **Login institucional com MFA real.** A tela do servidor ainda esta bloqueada
+  pela configuracao TOTP do Keycloak 26.4, portanto a fila foi verificada por
+  compilacao e contrato, mas nao por uma sessao institucional real.
 - **Demonstracao com Playwright e a ausencia de sessao injetada.** Nao
   executado.
+
+### Area institucional construida
+
+`apps/web/src/telas/operacao.tsx` agora possui fila paginada, filtro por estado,
+detalhe do pedido, seletor de contexto quando ha mais de um vinculo, historico
+e confirmacao de comandos. Os comandos exibidos chegam de
+`allowedCommandsFrom` no DTO do servidor; a autorizacao e a versao continuam
+sendo conferidas pelo backend. Conflito de versao mostra mensagem para
+recarregar, em vez de repetir uma acao com dados antigos.
+
+### Correcoes deste ciclo
+
+- Foi criado `GET /api/v1/auth/csrf`, sem sessao publica, que devolve apenas o
+  HMAC derivado do cookie HttpOnly. A mutacao continua exigindo sessao, Origin e
+  token CSRF; a interface agora consegue enviar o primeiro pedido sem relaxar
+  a proteção.
+- O cookie de sessao usava `maxAge` em segundos, embora Express espere
+  milissegundos. Ele expirava em 28,8 segundos. Agora dura oito horas, alinhado
+  ao TTL absoluto configurado.
+- Lista, fila e detalhe passaram a receber nome do servico, secretaria, estado
+  em linguagem simples, data e comandos legais do backend.
 
 ### Bugs encontrados construindo a interface
 
