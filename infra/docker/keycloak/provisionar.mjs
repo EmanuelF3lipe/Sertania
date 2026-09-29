@@ -248,6 +248,13 @@ const CONTAS = {
   ],
   'sertania-servidores': [
     {
+      entrada: 'admin@exemplo.invalid',
+      senha: 'admin-local-apenas',
+      email: 'admin@exemplo.invalid',
+      nome: 'Administrador',
+      sobrenome: 'Demonstracao',
+    },
+    {
       entrada: 'servidor.saude@exemplo.invalid',
       senha: 'ServidorSaude!2026-demo',
       email: 'servidor.saude@exemplo.invalid',

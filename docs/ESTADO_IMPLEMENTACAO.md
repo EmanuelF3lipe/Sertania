@@ -62,6 +62,7 @@ As contas de servidor agora entram com o e-mail como identificador visivel:
 
 - `servidor.saude@exemplo.invalid` / `ServidorSaude!2026-demo`
 - `servidor.infra@exemplo.invalid` / `ServidorInfra!2026-demo`
+- `admin@exemplo.invalid` / `admin-local-apenas` (gestor de demonstracao da Infraestrutura)
 
 O Keycloak confirmou no navegador o campo "Nome de usuário ou e-mail" e levou a
 conta até `CONFIGURE_TOTP`. Portanto a troca do identificador foi verificada,

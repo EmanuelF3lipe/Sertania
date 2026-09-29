@@ -110,7 +110,10 @@ const CATALOGO = [
     },
     sla: { name: 'Infraestrutura - 5 dias uteis', minutes: 720, value: 5, unit: 'BUSINESS_DAYS', published: true },
     team: 'Atendimento de vias',
-    servidores: [{ usuario: 'servidor.infra@exemplo.invalid', papel: 'ATTENDANT' }],
+    servidores: [
+      { usuario: 'servidor.infra@exemplo.invalid', papel: 'ATTENDANT' },
+      { usuario: 'admin@exemplo.invalid', papel: 'SECRETARY_MANAGER' },
+    ],
   },
   {
     secretariat: {
