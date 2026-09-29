@@ -26,6 +26,8 @@ export interface AppConfig {
   readonly keycloakClientId: string;
   readonly keycloakClientSecret: string;
   readonly keycloakRedirectUri: string;
+  readonly turnstileSiteKey: string;
+  readonly turnstileSecretKey: string;
   readonly redisSessionUrl: string;
   readonly redisQueueUrl: string;
   readonly s3: {
@@ -132,6 +134,12 @@ export function validateEnvironment(input: Record<string, unknown>): ValidatedEn
         );
       }
     }
+    if (input['KEYCLOAK_ADMIN_USERNAME'] === undefined || input['KEYCLOAK_ADMIN_PASSWORD'] === undefined) {
+      throw new Error('KEYCLOAK_ADMIN_USERNAME e KEYCLOAK_ADMIN_PASSWORD sao obrigatorias fora do ambiente local.');
+    }
+    if (input['KEYCLOAK_ADMIN_PASSWORD'] === 'admin-local-apenas') {
+      throw new Error('KEYCLOAK_ADMIN_PASSWORD ainda esta com valor de demonstracao.');
+    }
     if (input['SESSION_COOKIE_SECURE'] === undefined || input['SESSION_COOKIE_SECURE'] === 'false') {
       throw new Error(
         'SESSION_COOKIE_SECURE precisa ser true fora do ambiente local: o cookie __Host- exige HTTPS.',
@@ -183,6 +191,8 @@ export function configuration(): Record<string, unknown> {
     keycloakClientId: process.env['KEYCLOAK_CLIENT_ID'],
     keycloakClientSecret: process.env['KEYCLOAK_CLIENT_SECRET'],
     keycloakRedirectUri: process.env['KEYCLOAK_REDIRECT_URI'],
+    turnstileSiteKey: process.env['TURNSTILE_SITE_KEY'] ?? '',
+    turnstileSecretKey: process.env['TURNSTILE_SECRET_KEY'] ?? '',
     redisSessionUrl: process.env['REDIS_SESSION_URL'],
     redisQueueUrl: process.env['REDIS_QUEUE_URL'],
     s3: {

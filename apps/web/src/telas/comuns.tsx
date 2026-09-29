@@ -12,11 +12,13 @@ export function Cabecalho({
   area,
   podeAbrir,
   podeVerFila,
+  podeGerirServidores,
   sair,
 }: {
   readonly area: string;
   readonly podeAbrir: boolean;
   readonly podeVerFila: boolean;
+  readonly podeGerirServidores: boolean;
   readonly sair: () => Promise<void>;
 }) {
   return (
@@ -27,6 +29,7 @@ export function Cabecalho({
           {podeAbrir && <a href="#/minhas">Minhas solicitacoes</a>}
           {podeAbrir && <a href="#/nova">Abrir solicitacao</a>}
           {podeVerFila && <a href="#/fila">Fila da secretaria</a>}
+          {podeGerirServidores && <a href="#/administracao/servidores">Cadastrar servidor</a>}
         </nav>
         <button className="secundario" onClick={() => void sair()}>
           Sair

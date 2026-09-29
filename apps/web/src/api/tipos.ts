@@ -17,6 +17,7 @@ export interface Sessao {
     readonly openRequest: boolean;
     readonly viewQueue: boolean;
     readonly complete: boolean;
+    readonly manageServerAccess: boolean;
   };
 }
 

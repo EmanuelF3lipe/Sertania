@@ -376,7 +376,7 @@ export class AuthController {
       isCurrent: boolean;
     }>;
     /** Rotas que a interface pode oferecer com seguranca. */
-    can: { openRequest: boolean; viewQueue: boolean; complete: boolean };
+     can: { openRequest: boolean; viewQueue: boolean; complete: boolean; manageServerAccess: boolean };
   }> {
     if (!session) {
       return {
@@ -385,7 +385,7 @@ export class AuthController {
         isServer: false,
         userId: null,
         contexts: [],
-        can: { openRequest: false, viewQueue: false, complete: false },
+        can: { openRequest: false, viewQueue: false, complete: false, manageServerAccess: false },
       };
     }
 
@@ -413,6 +413,9 @@ export class AuthController {
         viewQueue: vinculos.some((m) => m.role !== 'TECH_ADMIN' && m.role !== 'AUDITOR'),
         complete: vinculos.some(
           (m) => m.role === 'ATTENDANT' || m.role === 'SECRETARY_MANAGER',
+        ),
+        manageServerAccess: vinculos.some(
+          (m) => m.role === 'SECRETARY_MANAGER' || m.role === 'TECH_ADMIN',
         ),
       },
     };

@@ -114,6 +114,8 @@ th, td { padding: .85rem .9rem; border-bottom: 1px solid var(--linha); text-alig
 th { background: var(--fundo-ciano); color: var(--marinho); font-size: .76rem; letter-spacing: .08em; text-transform: uppercase; }
 tr:last-child td { border-bottom: 0; }
 .contexto-barra { display: flex; align-items: center; gap: .7rem; padding: .7rem .9rem; margin-bottom: 1.25rem; background: var(--fundo-ciano); border: 1px solid #b8e7ed; border-radius: 12px; color: var(--marinho); font-weight: 750; }
+.onboarding-qr { display: grid; justify-items: center; gap: .4rem; margin: 1.25rem 0; padding: 1rem; background: var(--fundo-ciano); border: 1px dashed #8edbe6; border-radius: 12px; }
+.onboarding-qr img { background: white; padding: .5rem; border-radius: 8px; }
 .contexto-barra select { max-width: 360px; background: var(--branco); }
 .operacao-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, .75fr); gap: 1.25rem; align-items: start; }
 .painel-acao { position: sticky; top: 1rem; }

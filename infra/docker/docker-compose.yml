@@ -238,8 +238,7 @@ services:
 
   # --- Keycloak ---------------------------------------------------------
   # Dois realms: cidadaos e servidores. O institucional tem autocadastro
-  # desligado e MFA obrigatorio; esses ajustes sao aplicados por script, e nao
-  # pela interface, para que o estado seja reproduzivel.
+  # desligado; o primeiro acesso usa convite por e-mail e verificacao Turnstile.
   keycloak:
     image: quay.io/keycloak/keycloak:26.4
     <<: [*logging, *restart]

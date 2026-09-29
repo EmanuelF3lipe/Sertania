@@ -71,6 +71,20 @@ O administrador local não precisa de verificação adicional de e-mail.
 O administrador local também ficou com `admin@exemplo.invalid` e
 `emailVerified=true`, aplicado por `infra/docker/keycloak/provisionar.mjs`.
 
+### Primeiro acesso de servidor
+
+O administrador autenticado pode abrir `Cadastrar servidor`, informar o e-mail,
+secretaria, unidade e perfil. A API cria a conta institucional desativada,
+grava o vínculo municipal e envia um convite pelo SMTP configurado. O convite
+leva à tela de criação de senha e mostra um QR para uma página de verificação
+humana com Turnstile. A verificação libera um código de oito dígitos, com dez
+minutos de validade e uso único. A senha é então registrada no Keycloak e a
+conta é ativada; o login seguinte continua sendo apenas e-mail + senha.
+
+No desenvolvimento, quando as chaves Turnstile estão vazias, há um botão local
+de teste. Em produção, o bypass não existe e `TURNSTILE_SECRET_KEY` é
+obrigatória para validar o desafio no servidor.
+
 ### Area institucional construida
 
 `apps/web/src/telas/operacao.tsx` agora possui fila paginada, filtro por estado,
@@ -195,6 +209,7 @@ o formulario de login do Keycloak, e o Keycloak de verdade.
 | Identidade no banco | `external_identities` com `realm = sertania-ciudadanos`, `subject` do token, e **zero** `memberships` |
 | Login institucional por e-mail | Conta `admin@exemplo.invalid` aceita no realm `sertania-servidores`, com `requiredActions=[]`, e-mail verificado e credencial de senha |
 | Excecao administrativa local | O administrador de demonstração não precisa verificar e-mail novamente; o vínculo `SECRETARY_MANAGER` está na Infraestrutura |
+| Primeiro acesso | Convite SMTP, código único após Turnstile/QR e criação de senha foram percorridos contra Mailpit e Keycloak |
 
 O fluxo atual é deliberadamente o modo demonstrativo solicitado: e-mail + senha.
 O antigo bloqueio de MFA/TOTP foi removido do realm de servidores e da validação
@@ -203,9 +218,9 @@ móvel.
 
 ### O que NAO esta verificado
 
-- **Envio de e-mail transacional real.** O login usa a identidade de e-mail do
-  Keycloak e não um código enviado por SMTP; não foi criado um provedor de
-  códigos de e-mail.
+- **CAPTCHA real em produção.** O fluxo foi integrado ao Turnstile, mas o
+  ambiente local usa o bypass de desenvolvimento porque não possui chaves de
+  produção.
 
 ### Decisoes do marco
 

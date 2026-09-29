@@ -462,7 +462,8 @@ mantém o token apenas em memória e o apaga ao sair ou trocar contexto.
 ## 16. E-mail como identificador pode ser o fluxo demonstrativo escolhido
 
 **Decisao.** O ambiente demonstrativo passou a usar e-mail + senha no realm
-institucional, sem a required action `CONFIGURE_TOTP`.
+institucional, sem a required action `CONFIGURE_TOTP`. O primeiro cadastro
+ganhou um fluxo próprio de convite, QR, Turnstile e código de uso único.
 
 **Por que.** `loginWithEmailAllowed` já permite e-mail no formulário do
 Keycloak. Reescrever o `username` de contas existentes não era necessário — e
@@ -475,3 +476,17 @@ e as contas comuns são provisionadas como verificadas. Isso atende ao fluxo de
 demonstração, mas e-mail + senha não deve ser tratado como equivalente a MFA em
 produção; um ambiente real deve reativar um segundo fator ou outro controle
 forte.
+
+---
+
+## 17. QR Code transporta o desafio; não substitui a identidade
+
+**Decisao.** O QR do primeiro acesso abre uma página própria, valida o Turnstile
+no servidor e libera um código aleatório de oito dígitos. O código é armazenado
+somente como HMAC, expira em dez minutos e é invalidado depois de uma tentativa
+correta.
+
+**Aprendizado.** Um CAPTCHA caseiro seria facilmente automatizado e um QR
+sozinho não prova quem é a pessoa. A identidade vem do convite enviado ao
+e-mail institucional; o Turnstile reduz automação e o código vincula a etapa de
+criação de senha ao convite sem exigir aplicativo autenticador.

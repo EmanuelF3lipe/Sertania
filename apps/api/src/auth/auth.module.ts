@@ -9,12 +9,19 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
 import { AuthorizationStateStore } from './authorization-state.store';
 import { OidcService, type OidcSettings } from './oidc.service';
+import { KeycloakAdminService } from './keycloak-admin.service';
+import { MailService } from './mail.service';
+import { ServerOnboardingController } from './server-onboarding.controller';
+import { ServerOnboardingService } from './server-onboarding.service';
 
 @Module({
   imports: [ConfigModule],
-  controllers: [AuthController],
+  controllers: [AuthController, ServerOnboardingController],
   providers: [
     AuthorizationStateStore,
+    KeycloakAdminService,
+    MailService,
+    ServerOnboardingService,
     {
       provide: OidcService,
       inject: [ConfigService],

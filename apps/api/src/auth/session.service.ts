@@ -70,7 +70,15 @@ export class SessionService {
     private readonly secret: string,
     private readonly idleTtlSeconds: number,
     private readonly absoluteTtlSeconds: number,
+    private readonly configuredAbsoluteTtl?: () => Promise<number>,
   ) {}
+
+  private async currentAbsoluteTtl(): Promise<number> {
+    const configured = this.configuredAbsoluteTtl === undefined
+      ? this.absoluteTtlSeconds
+      : await this.configuredAbsoluteTtl();
+    return Number.isInteger(configured) && configured > 0 ? configured : this.absoluteTtlSeconds;
+  }
 
   /**
    * Identificador opaco do cookie.
@@ -118,17 +126,18 @@ export class SessionService {
    */
   async create(claims: Omit<SessionClaims, 'createdAt' | 'absoluteExpiresAt'>, now: number): Promise<string> {
     const sessionId = randomBytes(32).toString('base64url');
+    const absoluteTtlSeconds = await this.currentAbsoluteTtl();
     const stored: StoredSession = {
       claims: {
         ...claims,
         createdAt: now,
-        absoluteExpiresAt: now + this.absoluteTtlSeconds * 1000,
+        absoluteExpiresAt: now + absoluteTtlSeconds * 1000,
       },
       lastSeenAt: now,
     };
-    await this.store.setEx(this.key(sessionId), this.absoluteTtlSeconds, JSON.stringify(stored));
-    await this.store.setEx(this.userIndexKey(claims.userId), this.absoluteTtlSeconds, '');
-    await this.trackUserSession(claims.userId, sessionId, this.absoluteTtlSeconds);
+    await this.store.setEx(this.key(sessionId), absoluteTtlSeconds, JSON.stringify(stored));
+    await this.store.setEx(this.userIndexKey(claims.userId), absoluteTtlSeconds, '');
+    await this.trackUserSession(claims.userId, sessionId, absoluteTtlSeconds);
     return this.cookieValue(sessionId);
   }
 

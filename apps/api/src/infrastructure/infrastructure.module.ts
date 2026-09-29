@@ -53,13 +53,22 @@ import { ClamAvClient, type ClamAvConfig } from '../storage/clamav.client';
     },
     {
       provide: SessionService,
-      inject: [RedisSessionStore, ConfigService],
-      useFactory: (store: RedisSessionStore, config: ConfigService) =>
+      inject: [RedisSessionStore, ConfigService, Database],
+      useFactory: (store: RedisSessionStore, config: ConfigService, database: Database) =>
         new SessionService(
           store,
           config.get<string>('SESSION_SECRET') ?? '',
           config.get<number>('SESSION_IDLE_TTL_SECONDS', 1200),
           config.get<number>('SESSION_ABSOLUTE_TTL_SECONDS', 28800),
+          async () => {
+            const rows = await database.run<{ value: string }>(
+              `SELECT "value" FROM "system_settings" WHERE "key" = 'server_session_absolute_ttl_seconds'`,
+            );
+            const value = Number(rows[0]?.value);
+            return Number.isInteger(value) && value > 0
+              ? value
+              : config.get<number>('SESSION_ABSOLUTE_TTL_SECONDS', 28800);
+          },
         ),
     },
     {

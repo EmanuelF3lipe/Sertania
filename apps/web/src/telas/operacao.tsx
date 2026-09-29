@@ -13,6 +13,7 @@ import { useSessao } from '../api/sessao';
 import type { ContextoVinculo, DetalheOperacao, Pagina, PedidoOperacao } from '../api/tipos';
 import { Aviso, Estado } from './comuns';
 import { formatarData } from './cidadao';
+import { GestaoServidores } from './gestao-servidores';
 
 const ROTULOS: Readonly<Record<string, string>> = {
   START_REVIEW: 'Iniciar analise',
@@ -66,7 +67,9 @@ export function AreaOperacao({ rota }: { readonly rota: string }) {
           </select>
         </section>
       )}
-      {partes[0] === 'pedido' && pedidoId !== undefined ? (
+      {partes[0] === 'administracao' && partes[1] === 'servidores' ? (
+        <GestaoServidores />
+      ) : partes[0] === 'pedido' && pedidoId !== undefined ? (
         <DetalheOperacaoTela id={pedidoId} contexto={atual} />
       ) : (
         <FilaOperacao contexto={atual} />

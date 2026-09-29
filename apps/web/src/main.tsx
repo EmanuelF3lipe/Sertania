@@ -28,6 +28,7 @@ import {
   formatarData,
 } from './telas/cidadao';
 import { AreaOperacao } from './telas/operacao';
+import { CadastroServidor, VerificacaoServidor } from './telas/onboarding';
 import './estilos.css';
 
 const elemento = document.getElementById('raiz');
@@ -44,6 +45,7 @@ function rotaAtual(): string {
 function Aplicacao() {
   const { fase, sessao, sair } = useSessao();
   const [rota, definirRota] = useState<string>(rotaAtual());
+  const partesRota = rota.split('/').filter((parte) => parte !== '');
 
   useEffect(() => {
     const aoMudar = () => definirRota(rotaAtual());
@@ -62,6 +64,13 @@ function Aplicacao() {
     );
   }
 
+  if (partesRota[0] === 'cadastro-servidor' && partesRota[1] !== undefined) {
+    return <CadastroServidor token={decodeURIComponent(partesRota[1])} />;
+  }
+  if (partesRota[0] === 'verificacao-servidor' && partesRota[1] !== undefined) {
+    return <VerificacaoServidor token={decodeURIComponent(partesRota[1])} />;
+  }
+
   if (fase === 'anonimo') {
     return <TelaEntrada destino={rota} />;
   }
@@ -77,6 +86,7 @@ function Aplicacao() {
           area={sessao?.contexts[0]?.secretariatName ?? 'Servidor'}
           podeAbrir={false}
           podeVerFila={pode?.viewQueue ?? false}
+          podeGerirServidores={pode?.manageServerAccess ?? false}
           sair={sair}
         />
         <main className="conteudo" id="conteudo"><AreaOperacao rota={rota} /></main>
@@ -84,7 +94,7 @@ function Aplicacao() {
     );
   }
 
-  const partes = rota.split('/').filter((p) => p !== '');
+  const partes = partesRota;
 
   return (
     <>
@@ -93,6 +103,7 @@ function Aplicacao() {
         area="Cidadao"
         podeAbrir={pode?.openRequest ?? false}
         podeVerFila={false}
+        podeGerirServidores={false}
         sair={sair}
       />
       <main className="conteudo" id="conteudo">
