@@ -14,7 +14,7 @@ export class MailService {
     });
   }
 
-  async sendServerInvitation(input: { to: string; link: string; expiresAt: Date }): Promise<void> {
+  async sendServerInvitation(input: { to: string; link: string; expiresAt: Date; accessType: 'ADMIN' | 'USER' }): Promise<void> {
     try {
       await this.transporter.sendMail({
         from: {
@@ -22,9 +22,12 @@ export class MailService {
           address: this.config.get<string>('SMTP_FROM_ADDRESS', 'nao-responda@sertania.local'),
         },
         to: input.to,
-        subject: 'Convite para acesso aos servidores de Sertania',
+        subject: input.accessType === 'ADMIN'
+          ? 'Convite de administrador para Sertania'
+          : 'Convite para acesso aos servidores de Sertania',
         text: [
           'Voce foi convidado para acessar a plataforma institucional de Sertania.',
+          input.accessType === 'ADMIN' ? 'Este convite inclui acesso aos dashboards gerenciais autorizados.' : 'Este convite inclui acesso operacional autorizado.',
           '',
           `Crie sua senha neste link: ${input.link}`,
           `Este convite expira em ${input.expiresAt.toISOString()}.`,
@@ -32,6 +35,7 @@ export class MailService {
           'Se voce nao esperava este convite, ignore esta mensagem.',
         ].join('\n'),
         html: `<p>Voce foi convidado para acessar a plataforma institucional de Sertania.</p>` +
+          `<p>${input.accessType === 'ADMIN' ? 'Este convite inclui acesso aos dashboards gerenciais autorizados.' : 'Este convite inclui acesso operacional autorizado.'}</p>` +
           `<p><a href="${input.link}">Criar minha senha</a></p>` +
           `<p>Este convite expira em ${input.expiresAt.toISOString()}.</p>` +
           '<p>Se voce nao esperava este convite, ignore esta mensagem.</p>',

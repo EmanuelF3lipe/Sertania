@@ -17,6 +17,7 @@ const ROLES = new Set([
   'ATTENDANT',
   'OPERATIONAL_TEAM',
   'SECRETARY_MANAGER',
+  'CENTRAL_MANAGEMENT',
 ]);
 
 function normalizeEmail(value: string): string {
@@ -67,6 +68,7 @@ export class ServerOnboardingService {
   async createInvitation(input: {
     email: string;
     role: string;
+    accessType: string;
     secretariatId: string;
     unitId: string;
     session: SessionClaims | undefined;
@@ -74,7 +76,12 @@ export class ServerOnboardingService {
     if (input.session === undefined || !input.session.isServer) throw new ForbiddenException();
     const email = normalizeEmail(input.email);
     if (!validEmail(email)) throw new BadRequestException('E-mail invalido.');
-    if (!ROLES.has(input.role)) throw new BadRequestException('Perfil institucional invalido.');
+    if (input.accessType !== 'ADMIN' && input.accessType !== 'USER') {
+      throw new BadRequestException('Tipo de acesso invalido.');
+    }
+    const accessType: 'ADMIN' | 'USER' = input.accessType;
+    const role = accessType === 'ADMIN' ? 'CENTRAL_MANAGEMENT' : input.role;
+    if (!ROLES.has(role)) throw new BadRequestException('Perfil institucional invalido.');
 
     const decision = await this.authorization.check(
       input.session,
@@ -116,12 +123,12 @@ export class ServerOnboardingService {
         );
         await tx.run(
           `INSERT INTO "memberships" ("user_id","role","secretariat_id","unit_ids","team_ids") VALUES ($1,$2,$3,$4,'{}')`,
-          [user.id, input.role, input.secretariatId, [input.unitId]],
+          [user.id, role, input.secretariatId, [input.unitId]],
         );
         const rows = await tx.run<{ id: string }>(
           `INSERT INTO "server_invitations" ("user_id","email","role","secretariat_id","unit_id","token_hash","expires_at","created_by")
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING "id"`,
-          [user.id, email, input.role, input.secretariatId, input.unitId, tokenHash, expiresAt, input.session?.userId],
+          [user.id, email, role, input.secretariatId, input.unitId, tokenHash, expiresAt, input.session?.userId],
         );
         const row = rows[0];
         if (row === undefined) throw new Error('Convite institucional nao criado');
@@ -133,24 +140,29 @@ export class ServerOnboardingService {
     }
 
     const link = `${this.frontEndOrigin()}/#/cadastro-servidor/${encodeURIComponent(token)}`;
-    await this.mail.sendServerInvitation({ to: email, link, expiresAt });
+    await this.mail.sendServerInvitation({ to: email, link, expiresAt, accessType });
     return { invitationId, email, expiresAt: expiresAt.toISOString() };
   }
 
   private async reissueInvitation(invitationId: string): Promise<{ invitationId: string; email: string; expiresAt: string }> {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + this.invitationTtlMs());
-    const rows = await this.db.run<{ email: string }>(
+    const rows = await this.db.run<{ email: string; role: string }>(
       `UPDATE "server_invitations" SET "token_hash" = $2, "expires_at" = $3,
               "verification_code_hash" = NULL, "verification_attempts" = 0,
               "verification_expires_at" = NULL, "verification_verified_at" = NULL, "updated_at" = now()
-        WHERE "id" = $1 AND "status" = 'PENDING' RETURNING "email"`,
+        WHERE "id" = $1 AND "status" = 'PENDING' RETURNING "email","role"`,
       [invitationId, this.tokenHash(token), expiresAt],
     );
     const row = rows[0];
     if (row === undefined) throw new ConflictException('Convite nao esta mais pendente.');
     const link = `${this.frontEndOrigin()}/#/cadastro-servidor/${encodeURIComponent(token)}`;
-    await this.mail.sendServerInvitation({ to: row.email, link, expiresAt });
+    await this.mail.sendServerInvitation({
+      to: row.email,
+      link,
+      expiresAt,
+      accessType: row.role === 'CENTRAL_MANAGEMENT' ? 'ADMIN' : 'USER',
+    });
     return { invitationId, email: row.email, expiresAt: expiresAt.toISOString() };
   }
 
@@ -161,6 +173,7 @@ export class ServerOnboardingService {
       units: ReadonlyArray<{ id: string; name: string }>;
     }>;
     roles: ReadonlyArray<{ id: string; name: string }>;
+    accessTypes: ReadonlyArray<{ id: 'ADMIN' | 'USER'; name: string }>;
   }> {
     if (session === undefined || !session.isServer) throw new ForbiddenException();
     const subject = await this.authorization.subjectFor(session, new Date());
@@ -195,7 +208,35 @@ export class ServerOnboardingService {
         { id: 'OPERATIONAL_TEAM', name: 'Equipe operacional' },
         { id: 'SECRETARY_MANAGER', name: 'Gestor da secretaria' },
       ],
+      accessTypes: [
+        { id: 'USER', name: 'Usuario operacional' },
+        { id: 'ADMIN', name: 'Administrador com dashboards' },
+      ],
     };
+  }
+
+  async dashboard(session: SessionClaims | undefined): Promise<{
+    total: number;
+    completed: number;
+    byState: ReadonlyArray<{ state: string; total: number }>;
+  }> {
+    if (session === undefined || !session.isServer) throw new ForbiddenException();
+    const subject = await this.authorization.subjectFor(session, new Date());
+    const central = subject.memberships.some((item) => item.role === 'CENTRAL_MANAGEMENT');
+    const managed = subject.memberships
+      .filter((item) => item.role === 'SECRETARY_MANAGER')
+      .map((item) => item.secretariatId);
+    if (!central && managed.length === 0) throw new ForbiddenException();
+    const params: unknown[] = [];
+    const scope = central ? '' : 'WHERE r."secretariat_id" = ANY($1::uuid[])';
+    if (!central) params.push([...new Set(managed)]);
+    const rows = await this.db.run<{ state: string; total: number }>(
+      `SELECT r."state", count(*)::int AS "total" FROM "requests" r ${scope} GROUP BY r."state" ORDER BY r."state"`,
+      params,
+    );
+    const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
+    const completed = rows.find((row) => row.state === 'COMPLETED')?.total ?? 0;
+    return { total, completed: Number(completed), byState: rows.map((row) => ({ state: row.state, total: Number(row.total) })) };
   }
 
   async sessionSetting(session: SessionClaims | undefined): Promise<{ absoluteTtlSeconds: number }> {

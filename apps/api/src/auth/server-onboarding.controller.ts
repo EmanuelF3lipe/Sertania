@@ -17,6 +17,11 @@ export class ServerOnboardingController {
     return this.onboarding.sessionSetting(session);
   }
 
+  @Get('analytics/dashboard')
+  async dashboard(@CurrentSession() session: SessionClaims | undefined) {
+    return this.onboarding.dashboard(session);
+  }
+
   @Post('admin/settings/session')
   async updateSessionSetting(
     @Body() body: { absoluteTtlSeconds?: number },
@@ -27,12 +32,13 @@ export class ServerOnboardingController {
 
   @Post('admin/server-invitations')
   async createInvitation(
-    @Body() body: { email?: string; role?: string; secretariatId?: string; unitId?: string },
+    @Body() body: { email?: string; role?: string; accessType?: string; secretariatId?: string; unitId?: string },
     @CurrentSession() session: SessionClaims | undefined,
   ) {
     return this.onboarding.createInvitation({
       email: body.email ?? '',
       role: body.role ?? '',
+      accessType: body.accessType ?? 'USER',
       secretariatId: body.secretariatId ?? '',
       unitId: body.unitId ?? '',
       session,
