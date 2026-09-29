@@ -29,6 +29,8 @@ import {
 } from './telas/cidadao';
 import { AreaOperacao } from './telas/operacao';
 import { CadastroServidor, VerificacaoServidor } from './telas/onboarding';
+import { Configuracoes } from './telas/configuracoes';
+import { ProvedorAcessibilidade } from './acessibilidade';
 import './estilos.css';
 
 const elemento = document.getElementById('raiz');
@@ -87,6 +89,8 @@ function Aplicacao() {
           podeAbrir={false}
           podeVerFila={pode?.viewQueue ?? false}
           podeGerirServidores={pode?.manageServerAccess ?? false}
+          podeVerDashboard={pode?.viewDashboard ?? false}
+          homeHref="#/fila"
           sair={sair}
         />
         <main className="conteudo" id="conteudo"><AreaOperacao rota={rota} /></main>
@@ -104,15 +108,18 @@ function Aplicacao() {
         podeAbrir={pode?.openRequest ?? false}
         podeVerFila={false}
         podeGerirServidores={false}
+        podeVerDashboard={false}
+        homeHref="#/minhas"
         sair={sair}
       />
       <main className="conteudo" id="conteudo">
+        {partes[0] === 'configuracoes' && <Configuracoes />}
         {partes[0] === 'nova' && <NovaSolicitacao />}
         {partes[0] === 'minhas' && <MinhasSolicitacoes />}
         {partes[0] === 'pedido' && partes[1] !== undefined && (
           <DetalhePedido id={partes[1]} />
         )}
-        {partes[0] !== 'nova' && partes[0] !== 'minhas' && partes[0] !== 'pedido' && (
+        {partes[0] !== 'configuracoes' && partes[0] !== 'nova' && partes[0] !== 'minhas' && partes[0] !== 'pedido' && (
           <MinhasSolicitacoes />
         )}
         <footer className="dica" style={{ marginTop: '2rem' }}>
@@ -126,8 +133,8 @@ function Aplicacao() {
 
 createRoot(elemento).render(
   <StrictMode>
-    <ProvedorSessao>
-      <Aplicacao />
-    </ProvedorSessao>
+    <ProvedorAcessibilidade>
+      <ProvedorSessao><Aplicacao /></ProvedorSessao>
+    </ProvedorAcessibilidade>
   </StrictMode>,
 );

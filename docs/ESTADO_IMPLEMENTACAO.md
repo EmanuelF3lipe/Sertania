@@ -85,6 +85,22 @@ No desenvolvimento, quando as chaves Turnstile estão vazias, há um botão loca
 de teste. Em produção, o bypass não existe e `TURNSTILE_SECRET_KEY` é
 obrigatória para validar o desafio no servidor.
 
+### Navegação, acessibilidade e acesso gerencial
+
+As áreas autenticadas de cidadão e servidor usam o menu de três barras. Ele
+oferece a tela inicial e as configurações; a área institucional também mostra
+fila, cadastro de servidores e dashboard conforme as capacidades devolvidas por
+`/auth/me`. Configurações possuem os presets **Padrão**, **Alto contraste**,
+**Texto ampliado** e **Menos movimento**. Somente a preferência visual é salva
+no navegador; sessão, tokens e dados autenticados continuam exclusivamente no
+servidor.
+
+O formulário de convite permite selecionar **Usuário operacional** ou
+**Administrador com dashboards**. O segundo cria o papel central autorizado a
+ler indicadores; a API não libera o dashboard apenas por esconder ou mostrar um
+link. O e-mail do administrador master demonstrativo é configurável pelo
+desenvolvedor em `KEYCLOAK_ADMIN_EMAIL` antes do provisionamento.
+
 ### Area institucional construida
 
 `apps/web/src/telas/operacao.tsx` agora possui fila paginada, filtro por estado,

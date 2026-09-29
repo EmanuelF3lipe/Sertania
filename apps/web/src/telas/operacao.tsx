@@ -14,6 +14,8 @@ import type { ContextoVinculo, DetalheOperacao, Pagina, PedidoOperacao } from '.
 import { Aviso, Estado } from './comuns';
 import { formatarData } from './cidadao';
 import { GestaoServidores } from './gestao-servidores';
+import { Configuracoes } from './configuracoes';
+import { Dashboard } from './dashboard';
 
 const ROTULOS: Readonly<Record<string, string>> = {
   START_REVIEW: 'Iniciar analise',
@@ -67,7 +69,11 @@ export function AreaOperacao({ rota }: { readonly rota: string }) {
           </select>
         </section>
       )}
-      {partes[0] === 'administracao' && partes[1] === 'servidores' ? (
+      {partes[0] === 'configuracoes' ? (
+        <Configuracoes />
+      ) : partes[0] === 'dashboard' ? (
+        <Dashboard />
+      ) : partes[0] === 'administracao' && partes[1] === 'servidores' ? (
         <GestaoServidores />
       ) : partes[0] === 'pedido' && pedidoId !== undefined ? (
         <DetalheOperacaoTela id={pedidoId} contexto={atual} />

@@ -18,6 +18,7 @@ export interface Sessao {
     readonly viewQueue: boolean;
     readonly complete: boolean;
     readonly manageServerAccess: boolean;
+    readonly viewDashboard: boolean;
   };
 }
 

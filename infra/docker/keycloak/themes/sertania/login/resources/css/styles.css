@@ -1,0 +1,66 @@
+/* Identidade de login da Prefeitura: branco e verde, com foco visivel. */
+:root {
+  --sertania-verde: #168447;
+  --sertania-verde-escuro: #0d5d32;
+  --sertania-verde-claro: #e8f6ed;
+  --sertania-texto: #173526;
+}
+
+body {
+  background: #f6fbf7;
+  color: var(--sertania-texto);
+}
+
+.pf-v5-c-login {
+  background: #f6fbf7;
+}
+
+.pf-v5-c-login__main,
+.pf-v5-c-login__main-header,
+.pf-v5-c-login__main-body {
+  background: #ffffff;
+}
+
+.pf-v5-c-login__main {
+  border-top: 5px solid var(--sertania-verde);
+  box-shadow: 0 16px 42px rgba(23, 92, 49, .14);
+}
+
+.pf-v5-c-login__header {
+  color: var(--sertania-verde-escuro);
+}
+
+.pf-v5-c-button.pf-m-primary,
+input[type="submit"] {
+  background: var(--sertania-verde);
+  border-color: var(--sertania-verde);
+}
+
+.pf-v5-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:focus,
+input[type="submit"]:hover,
+input[type="submit"]:focus {
+  background: var(--sertania-verde-escuro);
+  border-color: var(--sertania-verde-escuro);
+}
+
+.pf-v5-c-form-control:focus,
+input:focus,
+select:focus {
+  border-color: var(--sertania-verde);
+  box-shadow: 0 0 0 3px rgba(22, 132, 71, .22);
+}
+
+a {
+  color: var(--sertania-verde-escuro);
+}
+
+a:hover,
+a:focus {
+  color: #084523;
+}
+
+:focus-visible {
+  outline: 3px solid #d68000;
+  outline-offset: 3px;
+}

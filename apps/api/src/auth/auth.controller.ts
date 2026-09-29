@@ -376,7 +376,7 @@ export class AuthController {
       isCurrent: boolean;
     }>;
     /** Rotas que a interface pode oferecer com seguranca. */
-     can: { openRequest: boolean; viewQueue: boolean; complete: boolean; manageServerAccess: boolean };
+     can: { openRequest: boolean; viewQueue: boolean; complete: boolean; manageServerAccess: boolean; viewDashboard: boolean };
   }> {
     if (!session) {
       return {
@@ -385,7 +385,7 @@ export class AuthController {
         isServer: false,
         userId: null,
         contexts: [],
-        can: { openRequest: false, viewQueue: false, complete: false, manageServerAccess: false },
+        can: { openRequest: false, viewQueue: false, complete: false, manageServerAccess: false, viewDashboard: false },
       };
     }
 
@@ -410,12 +410,17 @@ export class AuthController {
       can: {
         // Um cidadao autenticado abre pedido. Um servidor sem vinculo nao.
         openRequest: session.isCitizen,
-        viewQueue: vinculos.some((m) => m.role !== 'TECH_ADMIN' && m.role !== 'AUDITOR'),
+        viewQueue: vinculos.some(
+          (m) => m.role !== 'TECH_ADMIN' && m.role !== 'AUDITOR' && m.role !== 'CENTRAL_MANAGEMENT',
+        ),
         complete: vinculos.some(
           (m) => m.role === 'ATTENDANT' || m.role === 'SECRETARY_MANAGER',
         ),
         manageServerAccess: vinculos.some(
           (m) => m.role === 'SECRETARY_MANAGER' || m.role === 'TECH_ADMIN',
+        ),
+        viewDashboard: vinculos.some(
+          (m) => m.role === 'SECRETARY_MANAGER' || m.role === 'CENTRAL_MANAGEMENT',
         ),
       },
     };

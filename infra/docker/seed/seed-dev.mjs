@@ -59,6 +59,7 @@ function carregarEnv() {
 
 const arquivosEnv = carregarEnv();
 const env = arquivosEnv['.env'];
+const ADMIN_EMAIL = env['KEYCLOAK_ADMIN_EMAIL'] ?? 'admin@exemplo.invalid';
 const bancoDeTeste = arquivosEnv['.env.test']['TEST_POSTGRES_DB'];
 const soVerificar = process.argv.includes('--verificar');
 const problemas = [];
@@ -112,7 +113,7 @@ const CATALOGO = [
     team: 'Atendimento de vias',
     servidores: [
       { usuario: 'servidor.infra@exemplo.invalid', papel: 'ATTENDANT' },
-      { usuario: 'admin@exemplo.invalid', papel: 'SECRETARY_MANAGER' },
+      { usuario: ADMIN_EMAIL, papel: 'SECRETARY_MANAGER' },
     ],
   },
   {

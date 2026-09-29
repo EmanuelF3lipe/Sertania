@@ -5,6 +5,7 @@ import { Aviso, Estado } from './comuns';
 interface Options {
   readonly secretariats: readonly { id: string; name: string; units: readonly { id: string; name: string }[] }[];
   readonly roles: readonly { id: string; name: string }[];
+  readonly accessTypes: readonly { id: 'ADMIN' | 'USER'; name: string }[];
 }
 
 interface SessionSetting { readonly absoluteTtlSeconds: number }
@@ -15,6 +16,7 @@ export function GestaoServidores() {
   const [secretariatId, setSecretariatId] = useState('');
   const [unitId, setUnitId] = useState('');
   const [role, setRole] = useState('ATTENDANT');
+  const [accessType, setAccessType] = useState<'ADMIN' | 'USER'>('USER');
   const [message, setMessage] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [sessionHours, setSessionHours] = useState(8);
@@ -39,7 +41,7 @@ export function GestaoServidores() {
     setMessage(null);
     setSent(false);
     try {
-      await apiPost('/api/v1/admin/server-invitations', { email, role, secretariatId, unitId });
+      await apiPost('/api/v1/admin/server-invitations', { email, role, accessType, secretariatId, unitId });
       setSent(true);
       setEmail('');
     } catch (reason: unknown) {
@@ -71,7 +73,8 @@ export function GestaoServidores() {
           <div className="campo"><label className="rotulo" htmlFor="servidor-email">E-mail institucional</label><input id="servidor-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></div>
           <div className="campo"><label className="rotulo" htmlFor="servidor-secretaria">Secretaria</label><select id="servidor-secretaria" value={secretariatId} onChange={(event) => setSecretariatId(event.target.value)}>{options.secretariats.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
           <div className="campo"><label className="rotulo" htmlFor="servidor-unidade">Unidade</label><select id="servidor-unidade" value={unitId} onChange={(event) => setUnitId(event.target.value)}>{units.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
-          <div className="campo"><label className="rotulo" htmlFor="servidor-papel">Perfil</label><select id="servidor-papel" value={role} onChange={(event) => setRole(event.target.value)}>{options.roles.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+          <div className="campo"><label className="rotulo" htmlFor="servidor-tipo">Tipo de acesso</label><select id="servidor-tipo" value={accessType} onChange={(event) => setAccessType(event.target.value as 'ADMIN' | 'USER')}>{options.accessTypes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+          {accessType === 'USER' && <div className="campo"><label className="rotulo" htmlFor="servidor-papel">Perfil operacional</label><select id="servidor-papel" value={role} onChange={(event) => setRole(event.target.value)}>{options.roles.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>}
           <button type="submit" disabled={!ready}>Enviar convite</button>
         </form>}
       </div>

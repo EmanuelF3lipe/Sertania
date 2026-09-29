@@ -182,6 +182,7 @@ function baseDoRealm({ realm, displayName, registro }) {
     internationalizationEnabled: true,
     supportedLocales: ['pt-BR', 'en'],
     defaultLocale: 'pt-BR',
+    loginTheme: 'sertania',
   };
 }
 
@@ -249,9 +250,9 @@ const CONTAS = {
   ],
   'sertania-servidores': [
     {
-      entrada: 'admin@exemplo.invalid',
+      entrada: ADMIN_EMAIL,
       senha: 'admin-local-apenas',
-      email: 'admin@exemplo.invalid',
+      email: ADMIN_EMAIL,
       nome: 'Administrador',
       sobrenome: 'Demonstracao',
     },

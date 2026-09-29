@@ -6,31 +6,53 @@
  * isso garante que toda tela trate os tres estados da mesma forma: quem usa o
  * sistema ve sempre a mesma linguagem, e nenhuma tela esquece um dos casos.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 export function Cabecalho({
   area,
   podeAbrir,
   podeVerFila,
   podeGerirServidores,
+  podeVerDashboard,
+  homeHref,
   sair,
 }: {
   readonly area: string;
   readonly podeAbrir: boolean;
   readonly podeVerFila: boolean;
   readonly podeGerirServidores: boolean;
+  readonly podeVerDashboard: boolean;
+  readonly homeHref: string;
   readonly sair: () => Promise<void>;
 }) {
+  const [menuAberto, definirMenuAberto] = useState(false);
+  const fecharMenu = () => definirMenuAberto(false);
   return (
     <header className="topo">
       <div className="topo-conteudo">
         <h1>Sertania - {area}</h1>
-        <nav className="abas" aria-label="Navegacao principal">
-          {podeAbrir && <a href="#/minhas">Minhas solicitacoes</a>}
-          {podeAbrir && <a href="#/nova">Abrir solicitacao</a>}
-          {podeVerFila && <a href="#/fila">Fila da secretaria</a>}
-          {podeGerirServidores && <a href="#/administracao/servidores">Cadastrar servidor</a>}
-        </nav>
+        <div className="menu-navegacao">
+          <button
+            className="botao-menu"
+            aria-label="Abrir menu"
+            aria-expanded={menuAberto}
+            aria-controls="menu-principal"
+            onClick={() => definirMenuAberto((aberto) => !aberto)}
+          >
+            <span aria-hidden="true">☰</span><span>Menu</span>
+          </button>
+          {menuAberto && (
+            <nav id="menu-principal" className="menu-painel" aria-label="Menu principal">
+              <a href={homeHref} onClick={fecharMenu}>Tela inicial</a>
+              {podeAbrir && <a href="#/minhas" onClick={fecharMenu}>Minhas solicitacoes</a>}
+              {podeAbrir && <a href="#/nova" onClick={fecharMenu}>Abrir solicitacao</a>}
+              {podeVerFila && <a href="#/fila" onClick={fecharMenu}>Fila da secretaria</a>}
+              {podeVerDashboard && <a href="#/dashboard" onClick={fecharMenu}>Dashboard</a>}
+              {podeGerirServidores && <a href="#/administracao/servidores" onClick={fecharMenu}>Cadastrar servidor</a>}
+              <a href="#/configuracoes" onClick={fecharMenu}>Configuracoes</a>
+            </nav>
+          )}
+        </div>
         <button className="secundario" onClick={() => void sair()}>
           Sair
         </button>
