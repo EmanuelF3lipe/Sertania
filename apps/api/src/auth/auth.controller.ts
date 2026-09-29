@@ -21,7 +21,6 @@ import {
   SessionService,
   type SessionClaims,
 } from './session.service';
-import { tokenProvaSegundoFator } from './second-factor';
 import { CurrentSession, CsrfExempt, Public, lerCookie, type AuthenticatedRequest } from './session.guard';
 import { Database } from '../database/typed-query';
 import { AuthorizationService } from '../authorization/authorization.service';
@@ -206,23 +205,21 @@ export class AuthController {
       const url = this.oidc.urlDoCallback(request.path, this.consultaRecebida(request));
       const identity = await this.oidc.exchange(code, url, pending);
 
-      // Login institucional sem segundo fator nao entra na operacao
-      // (criterio 7 da secao 20). A conta existe, mas a sessao de servidor so e
-      // criada com MFA provado.
-      //
-      // A checagem e feita AQUI, e nao so no realm, porque sao defesas de
-      // camadas diferentes: o realm exige o segundo fator para emitir o token,
-      // e esta linha recusa qualquer token que chegue sem ele. Se um dia uma
-      // conta de servidor for emitida fora do realm institucional, esta
-      // verificacao ainda segura.
+      // O ambiente demonstrativo usa e-mail + senha no realm institucional.
+      // Para contas normais, o e-mail precisa estar marcado como verificado no
+      // token. O administrador local e uma excecao explicita: ele e criado pelo
+      // provisionamento com dominio `.invalid` e nao precisa passar por uma
+      // segunda tela de verificacao de e-mail.
       const isServer = realm === 'servers';
-      if (isServer && !tokenProvaSegundoFator(identity.amr)) {
+      const adminEmail = this.config.get<string>('KEYCLOAK_ADMIN_EMAIL', 'admin@exemplo.invalid');
+      const adminLocal = identity.email === adminEmail;
+      if (isServer && !identity.emailVerified && !adminLocal) {
         this.auditAuthFailure(
           identity.subject,
-          'MFA_AUSENTE',
-          `metodos declarados no token: ${identity.amr.join(',') || '(nenhum)'}`,
+          'EMAIL_NAO_VERIFICADO',
+          `e-mail recebido: ${identity.email ?? '(nenhum)'}`,
         );
-        response.redirect(`${front}/${LOGIN_ERRORS.blocked}`);
+        response.redirect(`${front}/entrar?erro=email_nao_verificado`);
         return;
       }
 

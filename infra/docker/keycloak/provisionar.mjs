@@ -172,8 +172,9 @@ function baseDoRealm({ realm, displayName, registro }) {
     bruteForceProtected: true,
     maxFailureWaitSeconds: 900,
     permanentLockout: false,
-    // TOTP e o segundo fator padrao dos dois realms. O realm de cidadaos nao
-    // exige, mas aceita quem configurar.
+    // O login demonstrativo usa e-mail + senha. `otpPolicyType` permanece
+    // configurado para que o realm possa evoluir para MFA sem recriar a base,
+    // mas a required action institucional e desligada abaixo.
     otpPolicyType: 'totp',
     // Interface em portugues. Alem de ser o idioma da prefeitura, isso
     // remove do meio do login a tela de escolha de idioma, que e um passo a
@@ -197,8 +198,8 @@ const CLIENTE = {
   // Implicit DESLIGADO: o token voltaria no fragmento da URL, e o fragmento
   // chega ao JavaScript e ao historico do navegador.
   implicitFlowEnabled: false,
-  // Direct Access Grants DESLIGADO: permitiria obter token por senha, sem
-  // passar pelo segundo fator do realm institucional.
+  // Direct Access Grants DESLIGADO: o login deve passar pelo fluxo OIDC com
+  // redirecionamento, callback e verificacoes de estado/nonce do BFF.
   directAccessGrantsEnabled: false,
   serviceAccountsEnabled: false,
   rootUrl: INTERFACE,
@@ -303,8 +304,7 @@ async function limparBloqueio(admin, realm, userId, entrada) {
  * Ela pertence ao realm `master`, e nao e uma identidade municipal. O e-mail
  * de demonstracao e `.invalid` e fica verificado para que o console local nao
  * interrompa o acesso com uma tela de confirmacao de e-mail. Isso nao libera
- * nenhum login institucional: os realms da aplicacao continuam separados e
- * os servidores continuam sujeitos ao TOTP.
+ * nenhum login institucional: os realms da aplicacao continuam separados.
  */
 async function garantirEmailDoAdmin(admin) {
   const usuarios = await admin.listar(
@@ -509,7 +509,10 @@ const DEFINICOES = [
     realm: env['KEYCLOAK_REALM_SERVERS'] ?? 'sertania-servidores',
     displayName: 'Sertania - Servidores',
     registro: false,
-    mfaObrigatoria: true,
+    // A demonstracao institucional entra com e-mail + senha. O admin local
+    // nao passa por verificacao adicional de e-mail; contas comuns continuam
+    // sendo provisionadas com `emailVerified: true`.
+    mfaObrigatoria: false,
   },
 ];
 

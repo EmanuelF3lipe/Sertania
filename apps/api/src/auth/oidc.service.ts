@@ -72,6 +72,8 @@ export interface AuthenticatedIdentity {
   readonly subject: string;
   readonly realm: string;
   readonly email: string | null;
+  /** Keycloak email_verified, usado pelo fluxo institucional por e-mail. */
+  readonly emailVerified: boolean;
   /**
    * Metodos de autenticacao declarados no token.
    *
@@ -274,6 +276,7 @@ export class OidcService {
 
     const amr = Array.isArray(claims.amr) ? (claims.amr as string[]) : [];
     const email = typeof claims.email === 'string' ? claims.email : null;
+    const emailVerified = claims.email_verified === true;
 
     // Defesa contra seguir um link de login e entrar com conta de servidor numa
     // sessao de cidadao, ou o contrario. A validacao de `iss` JA recusa um
@@ -293,7 +296,7 @@ export class OidcService {
       throw new Error('Realm do token nao corresponde ao fluxo');
     }
 
-    return { subject, realm: realmClaim, email, amr };
+    return { subject, realm: realmClaim, email, emailVerified, amr };
   }
 
   /** URL de logout do provedor, para revogacao central. */

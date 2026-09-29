@@ -1,14 +1,12 @@
 /**
- * Testes da politica de segundo fator (marco B, secao 20, criterio 7).
+ * Testes da politica de segundo fator que pode ser reativada em producao.
  *
  * O que estes testes NAO provam, e importante saber:
  *
- * Estes testes NAO provam que o login funciona. O login de cidadao foi
- * verificado no navegador contra o Keycloak, e o bloqueio de servidor sem
- * segundo fator foi observado no navegador (a sessao foi recusada com
- * `conta_bloqueada`). O que se prova aqui e a REGUA: quais `amr` contam como
- * prova de segundo fator. Um teste que so injete uma sessao no Redis nao
- * prova nada sobre isto, porque nao passa por nenhum provedor de identidade.
+ * Estes testes verificam apenas a REGUA: quais `amr` contam como prova de
+ * segundo fator. Um teste que so injete uma sessao no Redis nao prova nada
+ * sobre isto, porque nao passa por nenhum provedor de identidade. O fluxo
+ * demonstrativo atual usa e-mail + senha e nao exige essa regua.
  *
  * O `openid-client` e distribuido apenas como ESM e a suite unitaria roda em
  * CommonJS, entao o servico OIDC nao pode ser importado aqui. E a razao de a

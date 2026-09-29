@@ -13,9 +13,9 @@
  * carregaria. Separar a politica mantem a regra verificavel por teste de
  * verdade, sem simular o provedor de identidade.
  *
- * A verificacao de que o token REAL tem segundo fator continua sendo feita na
- * troca, com o token do provedor. O que esta politica decide e o significado
- * do campo `amr`.
+ * O fluxo demonstrativo atual usa e-mail + senha e nao chama esta politica.
+ * Ela permanece isolada e testada para permitir reativar MFA em um ambiente
+ * institucional real sem acoplar a regra ao cliente OIDC.
  */
 
 /**

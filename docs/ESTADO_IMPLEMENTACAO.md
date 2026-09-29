@@ -64,9 +64,10 @@ As contas de servidor agora entram com o e-mail como identificador visivel:
 - `servidor.infra@exemplo.invalid` / `ServidorInfra!2026-demo`
 - `admin@exemplo.invalid` / `admin-local-apenas` (gestor de demonstracao da Infraestrutura)
 
-O Keycloak confirmou no navegador o campo "Nome de usuário ou e-mail" e levou a
-conta até `CONFIGURE_TOTP`. Portanto a troca do identificador foi verificada,
-mas o TOTP continua obrigatório; não foi removida a segunda camada de proteção.
+O Keycloak confirmou no navegador o campo "Nome de usuário ou e-mail". O realm
+de servidores agora usa e-mail + senha, sem required action de autenticador
+móvel; as contas têm `requiredActions=[]` e somente credencial de senha.
+O administrador local não precisa de verificação adicional de e-mail.
 O administrador local também ficou com `admin@exemplo.invalid` e
 `emailVerified=true`, aplicado por `infra/docker/keycloak/provisionar.mjs`.
 
@@ -192,23 +193,19 @@ o formulario de login do Keycloak, e o Keycloak de verdade.
 | Autenticacao real | Formulario do Keycloak aceitou `cidadao.a@exemplo.invalid`, e o navegador voltou para `http://localhost:5173/minhas-solicitacoes` |
 | Sessao criada | `GET /api/v1/auth/me` devolveu `{"authenticated":true,"isCitizen":true,"can":{"openRequest":true,...}}` |
 | Identidade no banco | `external_identities` com `realm = sertania-ciudadanos`, `subject` do token, e **zero** `memberships` |
-| Segundo fator exigido | Login de servidor para em `execution=CONFIGURE_TOTP`; o Keycloak **nao emite codigo** enquanto o segundo fator nao for configurado |
-| Portao da aplicacao | Token de servidor sem segundo fator foi recusado: redirecionou para `conta_bloqueada`, com log `MFA_AUSENTE ... metodos declarados no token: (nenhum)` |
+| Login institucional por e-mail | Conta `admin@exemplo.invalid` aceita no realm `sertania-servidores`, com `requiredActions=[]`, e-mail verificado e credencial de senha |
+| Excecao administrativa local | O administrador de demonstração não precisa verificar e-mail novamente; o vínculo `SECRETARY_MANAGER` está na Infraestrutura |
 
-O ultimo item e defesa em profundidade verificada na pratica: mesmo com o
-Keycloak emitindo um token sem segundo fator, a aplicacao **nao** criou sessao
-de servidor.
+O fluxo atual é deliberadamente o modo demonstrativo solicitado: e-mail + senha.
+O antigo bloqueio de MFA/TOTP foi removido do realm de servidores e da validação
+do callback para que a conta administrativa local possa entrar sem autenticador
+móvel.
 
 ### O que NAO esta verificado
 
-- **O caminho de servidor COM segundo fator nao foi percorrido no navegador.** A
-  tela de entrada manual do TOTP do Keycloak 26.4 responde
-  `Ocorreu um erro interno no servidor` (erro de template FreeMarker no tema),
-  entao nao ha como configurar o segundo fator sem um aplicativo autenticador
-  de verdade. A regra que decide o que conta como prova de segundo fator esta
-  coberta por 8 testes unitarios em `apps/api/test/oidc.test.ts`, mas o
-  percurso completo navegador ate sessao de servidor **nao foi executado**.
-  Nao se pode afirmar que o login institucional completo funciona.
+- **Envio de e-mail transacional real.** O login usa a identidade de e-mail do
+  Keycloak e não um código enviado por SMTP; não foi criado um provedor de
+  códigos de e-mail.
 
 ### Decisoes do marco
 
@@ -382,11 +379,11 @@ dois que produziu o `state` indefinido descrito adiante.
 6. **`content-length` na assinatura S3**: quebrava a requisicao, porque o Node
    o recalcula ao escrever o corpo.
 
-## Marco B - Login real com Keycloak (proximo)
+## Marco B - Login real com Keycloak
 
 - [ ] Cliente OIDC e rotas de login, callback, sessao e logout
 - [ ] Rotas de inicio, callback, sessao atual e logout
-- [ ] Realms de cidadaos e servidores, com MFA obrigatorio no institucional
+- [x] Realms de cidadaos e servidores, com login institucional por e-mail e senha
 - [ ] Resolucao de vinculo por `issuer + subject`
 - [ ] Rotacao de sessao no login e revogacao
 - [ ] Enderecos e cookies em desenvolvimento
