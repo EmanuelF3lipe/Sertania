@@ -18,6 +18,7 @@ export interface Sessao {
     readonly viewQueue: boolean;
     readonly complete: boolean;
     readonly manageServerAccess: boolean;
+    readonly manageCatalog: boolean;
     readonly viewDashboard: boolean;
   };
 }
@@ -80,6 +81,20 @@ export interface Pagina<T> {
   readonly offset: number;
 }
 
+/** Fotografia do relogio de prazo calculada pela API no instante da leitura. */
+export interface ProgressoSla {
+  readonly progressPercent: number;
+  readonly elapsedMinutes: number;
+  readonly targetMinutes: number;
+  readonly remainingMinutes: number;
+  readonly businessUnit: boolean;
+  readonly dueAt: string | null;
+  readonly overdue: boolean;
+  readonly paused: boolean;
+  readonly publishedCommitment: boolean;
+  readonly asOf: string;
+}
+
 /** Item da lista de pedidos do cidadao. */
 export interface PedidoCidadao {
   readonly id: string;
@@ -90,6 +105,7 @@ export interface PedidoCidadao {
   readonly secretariatName: string;
   readonly createdAt: string;
   readonly dueAt: string | null;
+  readonly sla: ProgressoSla | null;
   readonly outcome: string | null;
 }
 
@@ -105,7 +121,51 @@ export interface PedidoOperacao {
   readonly createdAt: string;
   readonly submittedAt?: string | null;
   readonly dueAt: string | null;
+  readonly sla: ProgressoSla | null;
   readonly version: number;
+  readonly priority?: string;
+  readonly assigneeUserId?: string | null;
+}
+
+export interface CatalogoAdminServico {
+  readonly id: string;
+  readonly slug: string;
+  readonly active: boolean;
+  readonly defaultUnitId: string | null;
+  readonly version: {
+    readonly id: string | null;
+    readonly number: number | null;
+    readonly name: string;
+    readonly description: string;
+    readonly guidance: string;
+    readonly formSchema: unknown;
+    readonly classification: string;
+    readonly requiresRepresentation: boolean;
+    readonly maxAttachments: number;
+    readonly published: boolean;
+    readonly publishedAt: string | null;
+    readonly sla: {
+      readonly id: string;
+      readonly name: string;
+      readonly firstResponseMinutes: number;
+      readonly resolutionValue: number;
+      readonly resolutionUnit: string;
+      readonly publishedCommitment: boolean;
+    } | null;
+  } | null;
+  readonly teams: readonly { readonly id: string; readonly unitId: string; readonly name: string; readonly enabled: boolean }[];
+}
+
+export interface CatalogoAdmin {
+  readonly secretariats: readonly {
+    readonly id: string;
+    readonly slug: string;
+    readonly name: string;
+    readonly description: string;
+    readonly active: boolean;
+    readonly units: readonly { readonly id: string; readonly name: string; readonly locality: string; readonly active: boolean }[];
+    readonly services: readonly CatalogoAdminServico[];
+  }[];
 }
 
 export interface LinhaDoTempo {
@@ -124,8 +184,12 @@ export interface DetalheCidadao {
   readonly description: string;
   readonly classification: string;
   readonly createdAt: string;
+  readonly version: number;
   readonly dueAt: string | null;
   readonly dueAtText: string;
+  readonly scheduledFor: string | null;
+  readonly scheduleIsEstimate: boolean;
+  readonly sla: ProgressoSla | null;
   readonly outcome: string | null;
   readonly outcomeText: string | null;
   readonly requiresRepresentation: boolean;
@@ -145,7 +209,39 @@ export interface DetalheOperacao {
   readonly createdAt: string;
   readonly dueAt: string | null;
   readonly dueAtText: string;
+  readonly scheduledFor: string | null;
+  readonly scheduleIsEstimate: boolean;
+  readonly sla: ProgressoSla | null;
+  readonly priority?: string;
+  readonly assigneeUserId?: string | null;
   readonly internalNote: string | null;
   readonly timeline: readonly LinhaDoTempo[];
   readonly allowedCommands: readonly string[];
+}
+
+export interface MensagemPedido {
+  readonly id: string;
+  readonly visibility: 'CITIZEN_VISIBLE' | 'INTERNAL_ONLY';
+  readonly body: string;
+  readonly authorUserId: string;
+  readonly isMine: boolean;
+  readonly createdAt: string;
+}
+
+export interface AvaliacaoPedido {
+  readonly id: string;
+  readonly requestId: string;
+  readonly cycleNumber: number;
+  readonly rating: number;
+  readonly comment: string | null;
+  readonly createdAt: string;
+}
+
+export interface AnexoPedido {
+  readonly id: string;
+  readonly detectedMediaType: string;
+  readonly sizeBytes: number;
+  readonly inspectionState: 'QUARANTINED' | 'SCANNING' | 'RELEASED' | 'REJECTED' | 'ERROR';
+  readonly available: boolean;
+  readonly createdAt: string;
 }

@@ -7,12 +7,14 @@
  * sistema ve sempre a mesma linguagem, e nenhuma tela esquece um dos casos.
  */
 import { useState, type ReactNode } from 'react';
+import { useTema } from '../tema';
 
 export function Cabecalho({
   area,
   podeAbrir,
   podeVerFila,
   podeGerirServidores,
+  podeGerirCatalogo,
   podeVerDashboard,
   homeHref,
   sair,
@@ -21,11 +23,13 @@ export function Cabecalho({
   readonly podeAbrir: boolean;
   readonly podeVerFila: boolean;
   readonly podeGerirServidores: boolean;
+  readonly podeGerirCatalogo: boolean;
   readonly podeVerDashboard: boolean;
   readonly homeHref: string;
   readonly sair: () => Promise<void>;
 }) {
   const [menuAberto, definirMenuAberto] = useState(false);
+  const { tema, alternarTema } = useTema();
   const fecharMenu = () => definirMenuAberto(false);
   return (
     <header className="topo">
@@ -48,12 +52,24 @@ export function Cabecalho({
               {podeAbrir && <a href="#/nova" onClick={fecharMenu}>Abrir solicitacao</a>}
               {podeVerFila && <a href="#/fila" onClick={fecharMenu}>Fila da secretaria</a>}
               {podeVerDashboard && <a href="#/dashboard" onClick={fecharMenu}>Dashboard</a>}
-              {podeGerirServidores && <a href="#/administracao/servidores" onClick={fecharMenu}>Cadastrar servidor</a>}
+              {podeGerirCatalogo && <a href="#/administracao/catalogo" onClick={fecharMenu}>Catálogo e serviços</a>}
+              {podeGerirServidores && <a href="#/administracao/servidores" onClick={fecharMenu}>Acessos e servidores</a>}
               <a href="#/configuracoes" onClick={fecharMenu}>Configuracoes</a>
             </nav>
           )}
         </div>
         <button
+          className="botao-tema secundario"
+          type="button"
+          aria-pressed={tema === 'escuro'}
+          aria-label={tema === 'escuro' ? 'Ativar modo claro' : 'Ativar modo escuro'}
+          onClick={alternarTema}
+        >
+          <span aria-hidden="true">{tema === 'escuro' ? '☀' : '☾'}</span>
+          {tema === 'escuro' ? 'Modo claro' : 'Modo escuro'}
+        </button>
+        <button
+          type="button"
           className="secundario"
           onClick={() => {
             if (window.confirm('Deseja realmente sair da plataforma?')) void sair();

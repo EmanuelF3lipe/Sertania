@@ -43,6 +43,10 @@ export interface AppConfig {
   readonly smtp: {
     readonly host: string;
     readonly port: number;
+    readonly user: string;
+    readonly password: string;
+    readonly secure: boolean;
+    readonly starttls: boolean;
     readonly fromName: string;
     readonly fromAddress: string;
   };
@@ -118,6 +122,11 @@ export function validateEnvironment(input: Record<string, unknown>): ValidatedEn
 
   const sessionSecret = required(input, 'SESSION_SECRET');
   const keycloakClientSecret = required(input, 'KEYCLOAK_CLIENT_SECRET');
+  const smtpUser = text(input, 'SMTP_USER', '').trim();
+  const smtpPassword = text(input, 'SMTP_PASSWORD', '');
+  if ((smtpUser === '') !== (smtpPassword === '')) {
+    throw new Error('SMTP_USER e SMTP_PASSWORD devem ser informados juntos.');
+  }
 
   // Segredo de demonstracao em ambiente nao local e falha na inicializacao.
   // Preferimos parar cedo a descobrir a falha em um incidente.
@@ -134,13 +143,21 @@ export function validateEnvironment(input: Record<string, unknown>): ValidatedEn
         );
       }
     }
-    if (input['KEYCLOAK_ADMIN_USERNAME'] === undefined || input['KEYCLOAK_ADMIN_PASSWORD'] === undefined) {
-      throw new Error('KEYCLOAK_ADMIN_USERNAME e KEYCLOAK_ADMIN_PASSWORD sao obrigatorias fora do ambiente local.');
+    if (
+      input['KEYCLOAK_ADMIN_USERNAME'] === undefined ||
+      input['KEYCLOAK_ADMIN_PASSWORD'] === undefined
+    ) {
+      throw new Error(
+        'KEYCLOAK_ADMIN_USERNAME e KEYCLOAK_ADMIN_PASSWORD sao obrigatorias fora do ambiente local.',
+      );
     }
-    if (input['KEYCLOAK_ADMIN_PASSWORD'] === 'admin-local-apenas') {
+    if (input['KEYCLOAK_ADMIN_PASSWORD'] === 'admin-local-apenas' || input['KEYCLOAK_ADMIN_PASSWORD'] === 'admin') {
       throw new Error('KEYCLOAK_ADMIN_PASSWORD ainda esta com valor de demonstracao.');
     }
-    if (input['SESSION_COOKIE_SECURE'] === undefined || input['SESSION_COOKIE_SECURE'] === 'false') {
+    if (
+      input['SESSION_COOKIE_SECURE'] === undefined ||
+      input['SESSION_COOKIE_SECURE'] === 'false'
+    ) {
       throw new Error(
         'SESSION_COOKIE_SECURE precisa ser true fora do ambiente local: o cookie __Host- exige HTTPS.',
       );
@@ -167,6 +184,8 @@ export function validateEnvironment(input: Record<string, unknown>): ValidatedEn
     POSTGRES_PORT: text(input, 'POSTGRES_PORT', '5432'),
     CLAMAV_PORT: text(input, 'CLAMAV_PORT', '3310'),
     SMTP_PORT: text(input, 'SMTP_PORT', '1025'),
+    SMTP_SECURE: boolean(input['SMTP_SECURE'], false) ? 'true' : 'false',
+    SMTP_STARTTLS: boolean(input['SMTP_STARTTLS'], false) ? 'true' : 'false',
     DATA_ENCRYPTION_KEY_VERSION: text(input, 'DATA_ENCRYPTION_KEY_VERSION', '1'),
     DEMO_SLA_SIMULATED: boolean(input['DEMO_SLA_SIMULATED'], true) ? 'true' : 'false',
     SESSION_COOKIE_SECURE: boolean(input['SESSION_COOKIE_SECURE'], !isLocal) ? 'true' : 'false',
@@ -212,6 +231,10 @@ export function configuration(): Record<string, unknown> {
     smtp: {
       host: process.env['SMTP_HOST'] ?? 'localhost',
       port: Number(process.env['SMTP_PORT'] ?? '1025'),
+      user: process.env['SMTP_USER'] ?? '',
+      password: process.env['SMTP_PASSWORD'] ?? '',
+      secure: process.env['SMTP_SECURE'] === 'true',
+      starttls: process.env['SMTP_STARTTLS'] === 'true',
       fromName: process.env['SMTP_FROM_NAME'] ?? 'Prefeitura de Sertania',
       fromAddress: process.env['SMTP_FROM_ADDRESS'] ?? 'nao-responda@sertania.local',
     },

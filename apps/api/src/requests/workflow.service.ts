@@ -9,12 +9,13 @@
  * 3. Verificacao de versao, para conflito controlado em alteracao concorrente.
  * 4. Gravacao do evento, com informacao publica e interna separadas.
  */
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { Transaction, type Row } from '../database/typed-query';
 import {
   canTransition,
   isCompletionOutcome,
+  resolveInformationReturn,
   targetStateFor,
   type RequestOutcome,
   type RequestState,
@@ -162,10 +163,27 @@ export class WorkflowService {
       if (!canTransition(request.state, command)) {
         return { ok: false, error: 'ILLEGAL_TRANSITION' };
       }
+      if (
+        (command === 'REOPEN' || command === 'DECIDE_REOPEN_APPROVE') &&
+        request.completed_at !== null &&
+        !isReopenWindowOpen(request.completed_at, context.now)
+      ) {
+        return { ok: false, error: 'REOPEN_WINDOW_CLOSED' };
+      }
 
-      const target = targetStateFor(request.state, command);
+      let target = targetStateFor(request.state, command);
       if (target === null) {
         return { ok: false, error: 'ILLEGAL_TRANSITION' };
+      }
+      if (command === 'PROVIDE_INFORMATION') {
+        if (request.state_before_waiting === null) {
+          return { ok: false, error: 'ILLEGAL_TRANSITION' };
+        }
+        try {
+          target = resolveInformationReturn(request.state, request.state_before_waiting);
+        } catch {
+          return { ok: false, error: 'ILLEGAL_TRANSITION' };
+        }
       }
 
       // Acao especifica do comando, com os dados que ele exige.
@@ -210,6 +228,21 @@ export class WorkflowService {
         throw new VersionConflictError(context.expectedVersion, request.version + 1);
       }
 
+      if (command === 'REOPEN' || command === 'DECIDE_REOPEN_APPROVE') {
+        const nextCycle = request.cycle_number + 1;
+        await tx.run(
+          `UPDATE "request_cycles"
+              SET "closed_at" = COALESCE("closed_at", $1)
+            WHERE "request_id" = $2 AND "cycle_number" = $3`,
+          [context.now, context.requestId, request.cycle_number],
+        );
+        await tx.run(
+          `INSERT INTO "request_cycles" ("request_id","cycle_number","started_at","from_reopen")
+           VALUES ($1,$2,$3,true)`,
+          [context.requestId, nextCycle, context.now],
+        );
+      }
+
       await this.recordEvent(tx, command, request, target, context);
 
       // Ciclo fechado ao concluir ou cancelar.
@@ -225,6 +258,23 @@ export class WorkflowService {
       // Pausa de prazo: inicia ao pedir complementacao, encerra ao receber
       // resposta. Cada pausa registra inicio e fim (secao 8).
       if (command === 'REQUEST_INFORMATION') {
+        const information = context as InformationRequestContext;
+        const question = (information.question ?? context.publicText).trim();
+        if (question.length === 0) {
+          throw new BadRequestException('A pergunta de complementacao e obrigatoria.');
+        }
+        await tx.run(
+          `INSERT INTO "information_requests"
+             ("request_id","requested_by","return_state","question","expected_response")
+           VALUES ($1,$2,$3,$4,$5)`,
+          [
+            context.requestId,
+            context.actorUserId,
+            request.state,
+            question,
+            information.expectedResponse?.trim() || null,
+          ],
+        );
         await tx.run(
           `INSERT INTO "sla_pauses" ("request_id","state","started_at","reason","approved_by")
            VALUES ($1, 'WAITING_CITIZEN', $2, $3, $4)`,
@@ -233,8 +283,27 @@ export class WorkflowService {
       }
       if (command === 'PROVIDE_INFORMATION') {
         await tx.run(
+          `UPDATE "information_requests"
+              SET "status" = 'ANSWERED', "answered_at" = $1
+            WHERE "request_id" = $2 AND "status" = 'PENDING'`,
+          [context.now, context.requestId],
+        );
+        await tx.run(
           `UPDATE "sla_pauses" SET "ended_at" = $1
-            WHERE "request_id" = $2 AND "ended_at" IS NULL`,
+           WHERE "request_id" = $2 AND "ended_at" IS NULL`,
+          [context.now, context.requestId],
+        );
+      }
+      if (target === 'CANCELED') {
+        await tx.run(
+          `UPDATE "information_requests"
+              SET "status" = 'CANCELLED'
+            WHERE "request_id" = $1 AND "status" = 'PENDING'`,
+          [context.requestId],
+        );
+        await tx.run(
+          `UPDATE "sla_pauses" SET "ended_at" = $1
+           WHERE "request_id" = $2 AND "ended_at" IS NULL`,
           [context.now, context.requestId],
         );
       }
@@ -268,6 +337,9 @@ export class WorkflowService {
     context: TransitionContext,
     request: RequestRow,
   ): { readonly setClause: string; readonly params: unknown[] } {
+    if (command === 'PROVIDE_INFORMATION') {
+      return { setClause: '"state_before_waiting" = NULL', params: [] };
+    }
     switch (target) {
       case 'SUBMITTED':
         return {
@@ -276,6 +348,10 @@ export class WorkflowService {
           params: [context.now],
         };
       case 'COMPLETED': {
+        // `DECIDE_REOPEN_DENY` conserva a conclusao original. A decisao
+        // registra apenas um novo evento e incrementa a versao; nao deve
+        // exigir um segundo resultado nem substituir a justificativa anterior.
+        if (command !== 'COMPLETE') return { setClause: '', params: [] };
         const complete = context as CompleteContext;
         if (!isCompletionOutcome(complete.outcome) || complete.justification.trim().length === 0) {
           throw new OutcomeRequiredError();
@@ -293,7 +369,7 @@ export class WorkflowService {
       }
       case 'CANCELED':
         return {
-          setClause: '"canceled_at" = $5, "cancel_reason" = $6',
+          setClause: '"canceled_at" = $5, "cancel_reason" = $6, "state_before_waiting" = NULL',
           params: [context.now, context.reason ?? 'Cancelado a pedido'],
         };
       case 'WAITING_CITIZEN': {
@@ -313,8 +389,9 @@ export class WorkflowService {
         // preservado para o indicador de reabertura.
         if (command === 'REOPEN' || command === 'DECIDE_REOPEN_APPROVE') {
           return {
-            setClause: '"cycle_number" = "cycle_number" + 1, "state_before_waiting" = NULL',
-            params: [],
+            setClause:
+              '"cycle_number" = "cycle_number" + 1, "cycle_started_at" = $5, "completed_at" = NULL, "canceled_at" = NULL, "cancel_reason" = NULL, "outcome" = NULL, "outcome_justification" = NULL, "internal_outcome_note" = NULL, "state_before_waiting" = NULL',
+            params: [context.now],
           };
         }
         return { setClause: '', params: [] };
@@ -346,7 +423,9 @@ export class WorkflowService {
         context.publicText,
         context.internalNote ?? null,
         context.reason ?? null,
-        request.cycle_number,
+        command === 'REOPEN' || command === 'DECIDE_REOPEN_APPROVE'
+          ? request.cycle_number + 1
+          : request.cycle_number,
         context.now,
       ],
     );

@@ -77,6 +77,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
     code: string;
     message: string;
   } {
+    // O interceptor multipart usa Multer antes de chamar o controller. O
+    // limite de tamanho continua sendo uma validacao de entrada, nao uma
+    // falha de infraestrutura, e precisa manter a resposta 400 padronizada.
+    if (isMulterFileSizeError(exception)) {
+      return {
+        status: HttpStatus.BAD_REQUEST,
+        code: API_ERROR_CODES.VALIDATION_FAILED,
+        message: 'O arquivo passa de 10 MB. Envie um arquivo menor.',
+      };
+    }
+
     if (exception instanceof DomainError) {
       const status = DOMAIN_STATUS[exception.code] ?? HttpStatus.CONFLICT;
       return { status, code: exception.code, message: exception.message };
@@ -86,9 +97,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const payload = exception.getResponse();
       const asBody =
-        typeof payload === 'object' && payload !== null
-          ? (payload as Record<string, unknown>)
-          : {};
+        typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>) : {};
       const code = typeof asBody['code'] === 'string' ? asBody['code'] : mapStatusToCode(status);
       const message =
         typeof asBody['message'] === 'string'
@@ -105,6 +114,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message: 'Nao foi possivel concluir a operacao. Tente novamente.',
     };
   }
+}
+
+function isMulterFileSizeError(exception: unknown): boolean {
+  if (typeof exception !== 'object' || exception === null) return false;
+  const code = (exception as { code?: unknown }).code;
+  return code === 'LIMIT_FILE_SIZE';
 }
 
 function mapStatusToCode(status: number): ApiErrorCode {

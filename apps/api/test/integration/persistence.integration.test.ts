@@ -381,6 +381,93 @@ describe('criterio 8: conflito de versao sem perda silenciosa', () => {
     if (!segunda.ok) throw new Error('a transicao deveria ter sido aplicada');
     expect(segunda.state).toBe('WAITING_CITIZEN');
   }, 30_000);
+
+  it('resposta do cidadao retorna ao estado anterior e encerra a pausa', async () => {
+    const base = await seedBase();
+    const criada = await openRequest.open(inputFor(base, 'Complementacao persistida'), undefined, NOW);
+    if (criada.outcome !== 'CREATED') throw new Error('criada');
+
+    await advanceToReview(criada.requestId, base.citizenId);
+    const pedido = await workflow.apply('REQUEST_INFORMATION', {
+      requestId: criada.requestId,
+      expectedVersion: await currentVersion(criada.requestId),
+      actorUserId: base.citizenId,
+      now: NOW,
+      publicText: 'Envie o numero da unidade de atendimento',
+    });
+    expect(pedido.ok).toBe(true);
+
+    const resposta = await workflow.apply('PROVIDE_INFORMATION', {
+      requestId: criada.requestId,
+      expectedVersion: await currentVersion(criada.requestId),
+      actorUserId: base.citizenId,
+      now: new Date(NOW.getTime() + 60 * 60_000),
+      publicText: 'Informacao enviada pelo cidadao',
+    });
+    expect(resposta.ok).toBe(true);
+    if (!resposta.ok) throw new Error('resposta deveria ser aceita');
+    expect(resposta.state).toBe('IN_REVIEW');
+
+    const estado = await dataSource.query(
+      `SELECT "state_before_waiting" FROM "requests" WHERE "id" = $1`,
+      [criada.requestId],
+    );
+    const informacoes = await dataSource.query(
+      `SELECT "status","answered_at" FROM "information_requests" WHERE "request_id" = $1`,
+      [criada.requestId],
+    );
+    const pausas = await dataSource.query(
+      `SELECT "ended_at" FROM "sla_pauses" WHERE "request_id" = $1`,
+      [criada.requestId],
+    );
+    expect((estado[0] as { state_before_waiting: string | null }).state_before_waiting).toBeNull();
+    expect((informacoes[0] as { status: string; answered_at: Date | null }).status).toBe('ANSWERED');
+    expect((informacoes[0] as { status: string; answered_at: Date | null }).answered_at).not.toBeNull();
+    expect((pausas[0] as { ended_at: Date | null }).ended_at).not.toBeNull();
+  }, 30_000);
+
+  it('cancelamento durante a espera encerra a pausa e a solicitacao pendente', async () => {
+    const base = await seedBase();
+    const criada = await openRequest.open(inputFor(base, 'Cancelamento durante complementacao'), undefined, NOW);
+    if (criada.outcome !== 'CREATED') throw new Error('criada');
+
+    await advanceToReview(criada.requestId, base.citizenId);
+    const pedido = await workflow.apply('REQUEST_INFORMATION', {
+      requestId: criada.requestId,
+      expectedVersion: await currentVersion(criada.requestId),
+      actorUserId: base.citizenId,
+      now: NOW,
+      publicText: 'Envie uma informacao adicional',
+    });
+    expect(pedido.ok).toBe(true);
+
+    const cancelamento = await workflow.apply('CANCEL', {
+      requestId: criada.requestId,
+      expectedVersion: await currentVersion(criada.requestId),
+      actorUserId: base.citizenId,
+      now: new Date(NOW.getTime() + 30 * 60_000),
+      publicText: 'O cidadao pediu o cancelamento da solicitacao.',
+      reason: 'Cancelamento solicitado pelo cidadao',
+    });
+    expect(cancelamento.ok).toBe(true);
+
+    const estado = await dataSource.query(
+      `SELECT "state","state_before_waiting" FROM "requests" WHERE "id" = $1`,
+      [criada.requestId],
+    );
+    const informacoes = await dataSource.query(
+      `SELECT "status" FROM "information_requests" WHERE "request_id" = $1`,
+      [criada.requestId],
+    );
+    const pausas = await dataSource.query(
+      `SELECT "ended_at" FROM "sla_pauses" WHERE "request_id" = $1`,
+      [criada.requestId],
+    );
+    expect((estado[0] as { state: string; state_before_waiting: string | null }).state).toBe('CANCELED');
+    expect((estado[0] as { state: string; state_before_waiting: string | null }).state_before_waiting).toBeNull();
+    expect((informacoes[0] as { status: string }).status).toBe('CANCELLED');
+    expect((pausas[0] as { ended_at: Date | null }).ended_at).not.toBeNull();
+  }, 30_000);
 });
 
 /** Le a versao atual de um pedido. */
@@ -523,6 +610,66 @@ describe('transicoes e conclusao (criterio 12)', () => {
     expect(ciclos).toHaveLength(1);
     // O ciclo encerrado preserva o tempo medido, em vez de sumir.
     expect((ciclos[0] as { closed_at: Date | null }).closed_at).not.toBeNull();
+  }, 30_000);
+
+  it('reabertura cria um novo ciclo e reinicia o relogio do ciclo', async () => {
+    const base = await seedBase();
+    const criada = await openRequest.open(inputFor(base, 'Pedido que sera reaberto'), undefined, NOW);
+    if (criada.outcome !== 'CREATED') throw new Error('criada');
+    await advanceToReview(criada.requestId, base.citizenId);
+    const conclusao = await workflow.apply('COMPLETE', {
+      requestId: criada.requestId,
+      expectedVersion: await currentVersion(criada.requestId),
+      actorUserId: base.citizenId,
+      now: NOW,
+      publicText: 'Pedido concluido inicialmente',
+      justification: 'A primeira analise foi concluida.',
+      outcome: 'RESOLVED',
+     } as never);
+    expect(conclusao.ok).toBe(true);
+
+    const negativa = await workflow.apply('DECIDE_REOPEN_DENY', {
+      requestId: criada.requestId,
+      expectedVersion: await currentVersion(criada.requestId),
+      actorUserId: base.citizenId,
+      now: new Date(NOW.getTime() + 30 * 60_000),
+      publicText: 'A solicitacao de reabertura nao foi aprovada.',
+      reason: 'Nao foram apresentados elementos novos.',
+    });
+    expect(negativa.ok).toBe(true);
+    if (!negativa.ok) throw new Error('negativa deveria ser aceita');
+    expect(negativa.state).toBe('COMPLETED');
+
+    const reabertura = await workflow.apply('REOPEN', {
+      requestId: criada.requestId,
+      expectedVersion: await currentVersion(criada.requestId),
+      actorUserId: base.citizenId,
+      now: new Date(NOW.getTime() + 60 * 60_000),
+      publicText: 'O cidadao apresentou nova informacao para reanalise.',
+      reason: 'Nova informacao apresentada',
+    });
+    expect(reabertura.ok).toBe(true);
+    if (!reabertura.ok) throw new Error('reabertura deveria ser aceita');
+    expect(reabertura.state).toBe('IN_REVIEW');
+
+    const estado = await dataSource.query(
+      `SELECT "state","cycle_number","cycle_started_at","completed_at","outcome"
+         FROM "requests" WHERE "id" = $1`,
+      [criada.requestId],
+    );
+    const ciclos = await dataSource.query(
+      `SELECT "cycle_number","started_at","closed_at","from_reopen"
+         FROM "request_cycles" WHERE "request_id" = $1 ORDER BY "cycle_number"`,
+      [criada.requestId],
+    );
+    expect((estado[0] as { state: string; cycle_number: number }).state).toBe('IN_REVIEW');
+    expect(Number((estado[0] as { cycle_number: number }).cycle_number)).toBe(2);
+    expect((estado[0] as { completed_at: Date | null }).completed_at).toBeNull();
+    expect((estado[0] as { outcome: string | null }).outcome).toBeNull();
+    expect(ciclos).toHaveLength(2);
+    expect((ciclos[0] as { closed_at: Date | null }).closed_at).not.toBeNull();
+    expect((ciclos[1] as { from_reopen: boolean; closed_at: Date | null }).from_reopen).toBe(true);
+    expect((ciclos[1] as { from_reopen: boolean; closed_at: Date | null }).closed_at).toBeNull();
   }, 30_000);
 });
 

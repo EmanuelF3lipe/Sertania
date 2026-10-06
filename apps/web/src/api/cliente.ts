@@ -83,7 +83,9 @@ async function pedir<T>(caminho: string, init: RequestInit = {}): Promise<Respos
 
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
-  if (init.body !== undefined) headers.set('Content-Type', 'application/json');
+  if (init.body !== undefined && !(init.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (precisaCsrf) {
     const token = await tokenCsrf();
     if (token !== '') headers.set(CSRF_HEADER, token);
@@ -126,7 +128,11 @@ export function apiGet<T>(caminho: string): Promise<T> {
   return pedir<T>(caminho).then((r) => r.corpo);
 }
 
-export function apiPost<T>(caminho: string, corpo: unknown, cabecalhos?: Record<string, string>): Promise<T> {
+export function apiPost<T>(
+  caminho: string,
+  corpo: unknown,
+  cabecalhos?: Record<string, string>,
+): Promise<T> {
   // headers so entra no objeto quando existe. Com exactOptionalPropertyTypes,
   // passar undefined para uma propriedade opcional e' erro de compilacao, e a
   // correcao nao e' desligar a regra: e' nao enviar o campo.
@@ -136,6 +142,10 @@ export function apiPost<T>(caminho: string, corpo: unknown, cabecalhos?: Record<
       ? { method: 'POST', body: JSON.stringify(corpo) }
       : { method: 'POST', body: JSON.stringify(corpo), headers: cabecalhos },
   ).then((r) => r.corpo);
+}
+
+export function apiUpload<T>(caminho: string, formulario: FormData): Promise<T> {
+  return pedir<T>(caminho, { method: 'POST', body: formulario }).then((r) => r.corpo);
 }
 
 /** Limpa dados efemeros ao sair ou trocar o contexto. */

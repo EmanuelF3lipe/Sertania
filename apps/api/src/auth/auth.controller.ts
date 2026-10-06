@@ -376,7 +376,14 @@ export class AuthController {
       isCurrent: boolean;
     }>;
     /** Rotas que a interface pode oferecer com seguranca. */
-     can: { openRequest: boolean; viewQueue: boolean; complete: boolean; manageServerAccess: boolean; viewDashboard: boolean };
+     can: {
+       openRequest: boolean;
+       viewQueue: boolean;
+       complete: boolean;
+       manageServerAccess: boolean;
+       manageCatalog: boolean;
+       viewDashboard: boolean;
+     };
   }> {
     if (!session) {
       return {
@@ -385,7 +392,14 @@ export class AuthController {
         isServer: false,
         userId: null,
         contexts: [],
-        can: { openRequest: false, viewQueue: false, complete: false, manageServerAccess: false, viewDashboard: false },
+         can: {
+           openRequest: false,
+           viewQueue: false,
+           complete: false,
+           manageServerAccess: false,
+           manageCatalog: false,
+           viewDashboard: false,
+         },
       };
     }
 
@@ -419,6 +433,7 @@ export class AuthController {
         manageServerAccess: vinculos.some(
           (m) => m.role === 'SECRETARY_MANAGER' || m.role === 'TECH_ADMIN',
         ),
+        manageCatalog: vinculos.some((m) => m.role === 'SECRETARY_MANAGER'),
         viewDashboard: vinculos.some(
           (m) => m.role === 'SECRETARY_MANAGER' || m.role === 'CENTRAL_MANAGEMENT',
         ),

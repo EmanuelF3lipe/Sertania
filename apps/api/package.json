@@ -5,7 +5,7 @@
     "type":  "commonjs",
     "main":  "dist/main.js",
     "scripts":  {
-                    "dev":  "tsx watch src/main.ts",
+                    "dev":  "nest start --watch",
                     "build":  "tsc -p tsconfig.build.json",
                     "start":  "node dist/main.js",
                     "typecheck":  "tsc --noEmit -p tsconfig.json",
@@ -20,7 +20,8 @@
                     "openapi":  "ts-node -r tsconfig-paths/register ./src/openapi/generate.ts",
                     "db:test:migrate":  "tsx scripts/preparar-banco-de-teste.ts",
                     "db:test:verify":  "node ../../infra/docker/postgres/provisionar.mjs --verificar",
-                    "db:test:provision":  "node ../../infra/docker/postgres/provisionar.mjs"
+                    "db:test:provision":  "node ../../infra/docker/postgres/provisionar.mjs",
+                    "worker:notifications":  "tsx scripts/notificacoes.ts"
                 },
     "dependencies":  {
                          "@nestjs/common":  "11.1.6",
@@ -39,6 +40,7 @@
                          "cookie-parser":  "1.4.7",
                          "helmet":  "8.1.0",
                          "ioredis":  "5.8.1",
+                         "multer":  "2.0.2",
                          "nestjs-pino":  "4.4.0",
                          "nodemailer":  "7.0.6",
                          "openid-client":  "6.7.0",
@@ -57,6 +59,7 @@
                             "@types/cookie-parser":  "1.4.9",
                             "@types/express":  "5.0.3",
                             "@types/jest":  "30.0.0",
+                            "@types/multer":  "2.0.0",
                             "@types/node":  "24.10.1",
                             "@types/nodemailer":  "7.0.3",
                             "@types/supertest":  "6.0.3",

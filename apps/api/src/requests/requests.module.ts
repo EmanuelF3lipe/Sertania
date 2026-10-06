@@ -10,6 +10,7 @@ import { RequestsController } from './requests.controller';
 import { OpenRequestService } from './open-request.service';
 import { WorkflowService } from './workflow.service';
 import { ProtocolService } from './protocol.service';
+import { SlaProgressService } from './sla-progress.service';
 
 /**
  * Modulo de solicitacoes.
@@ -24,11 +25,13 @@ import { ProtocolService } from './protocol.service';
     OpenRequestService,
     WorkflowService,
     ProtocolService,
+    SlaProgressService,
   ],
   exports: [
     OpenRequestService,
     WorkflowService,
     ProtocolService,
+    SlaProgressService,
   ],
 })
 export class RequestsModule {}

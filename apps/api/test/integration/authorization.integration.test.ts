@@ -165,11 +165,11 @@ async function servidor(
     `INSERT INTO "users" ("is_citizen","is_server") VALUES (false,true) RETURNING "id"`,
   );
   const userId = (u[0] as { id: string }).id;
-  const m = await ds.query(
-    `INSERT INTO "memberships"
+    const m = await ds.query(
+      `INSERT INTO "memberships"
        ("user_id","role","secretariat_id","unit_ids","team_ids","active","starts_at")
-     VALUES ($1,$2,$3,$4,$5,true, now() - interval '1 day') RETURNING "id"`,
-    [userId, role, secretariatId, unitIds, teamIds],
+      VALUES ($1,$2,$3,$4,$5,true, $6::timestamptz - interval '1 day') RETURNING "id"`,
+      [userId, role, secretariatId, unitIds, teamIds, NOW],
   );
   return { userId, membershipId: (m[0] as { id: string }).id };
 }
@@ -457,8 +457,8 @@ describe('criterio: vinculo revogado perde efeito com sessao valida', () => {
 
     // Revogacao, sem destruir a sessao.
     await ds.query(
-      `UPDATE "memberships" SET "active" = false, "revoked_at" = now() WHERE "id" = $1`,
-      [atendente.membershipId],
+      `UPDATE "memberships" SET "active" = false, "revoked_at" = $2 WHERE "id" = $1`,
+      [atendente.membershipId, NOW],
     );
 
     // A MESMA sessao, na chamada seguinte, ja nao concede acesso. E o que a
@@ -472,8 +472,8 @@ describe('criterio: vinculo revogado perde efeito com sessao valida', () => {
     const c = await cenario();
     const atendente = await servidor('ATTENDANT', c.secretariatSaude);
     await ds.query(
-      `UPDATE "memberships" SET "expires_at" = now() - interval '1 day' WHERE "id" = $1`,
-      [atendente.membershipId],
+      `UPDATE "memberships" SET "expires_at" = $2::timestamptz - interval '1 day' WHERE "id" = $1`,
+      [atendente.membershipId, NOW],
     );
 
     const criada = await openRequest.open(

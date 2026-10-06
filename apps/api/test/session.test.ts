@@ -83,9 +83,10 @@ describe('ciclo de vida da sessao (secao 12)', () => {
     const cookie = await service.create(claims(), T0);
     // O cookie traz id e assinatura; nao traz token do Keycloak nem dado do
     // cidadao.
-    expect(cookie).toContain('.');
-    expect(cookie).not.toContain('u-1');
-    expect(cookie).not.toContain('sertania-ciudadanos');
+    const partes = cookie.split('.');
+    expect(partes).toHaveLength(2);
+    expect(partes[0]).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(partes[1]).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
   it('resolve a sessao criada', async () => {
@@ -222,9 +223,11 @@ describe('conteudo da sessao', () => {
   it('nao usa CPF, data de nascimento ou protocolo como segredo', async () => {
     const { service } = makeService();
     const cookie = await service.create(claims(), T0);
-    // Nada disso aparece no cookie: o cookie e opaco e assinado.
-    expect(cookie).not.toMatch(/\d{11}/);
-    expect(cookie).not.toContain('SER-');
+    // O cookie e opaco e assinado; a estrutura nao carrega um payload legivel.
+    const partes = cookie.split('.');
+    expect(partes).toHaveLength(2);
+    expect(partes[0]).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(partes[1]).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 });
 

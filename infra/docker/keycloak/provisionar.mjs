@@ -54,6 +54,30 @@ const REDIRECT_URI = env['KEYCLOAK_REDIRECT_URI'] ?? 'http://localhost:3000/api/
 const POST_LOGOUT = env['KEYCLOAK_POST_LOGOUT_REDIRECT_URI'] ?? 'http://localhost:5173/';
 const INTERFACE = 'http://localhost:5173';
 
+function valorEnv(chave, fallback = '') {
+  const doProcesso = process.env[chave];
+  if (doProcesso !== undefined && doProcesso !== '') return doProcesso;
+  const doArquivo = env[chave];
+  if (doArquivo !== undefined && doArquivo !== '') return doArquivo;
+  return fallback;
+}
+
+const LOCAL_DEMO = valorEnv('NODE_ENV', 'development') !== 'production';
+const APP_ADMIN_USERNAME = valorEnv('KEYCLOAK_APP_ADMIN_USERNAME', LOCAL_DEMO ? 'admin' : '');
+const APP_ADMIN_PASSWORD = valorEnv('KEYCLOAK_APP_ADMIN_PASSWORD', LOCAL_DEMO ? 'admin' : '');
+const SMTP_HOST = valorEnv('SMTP_HOST', '127.0.0.1');
+const KEYCLOAK_SMTP_HOST = valorEnv(
+  'KEYCLOAK_SMTP_HOST',
+  SMTP_HOST === '127.0.0.1' || SMTP_HOST === 'localhost' ? 'mailpit' : SMTP_HOST,
+);
+const SMTP_PORT = valorEnv('SMTP_PORT', '1025');
+const SMTP_FROM_NAME = valorEnv('SMTP_FROM_NAME', 'Prefeitura de Sertania');
+const SMTP_FROM_ADDRESS = valorEnv('SMTP_FROM_ADDRESS', 'nao-responda@sertania.local');
+const SMTP_USER = valorEnv('SMTP_USER');
+const SMTP_PASSWORD = valorEnv('SMTP_PASSWORD');
+const SMTP_SECURE = valorEnv('SMTP_SECURE', 'false');
+const SMTP_STARTTLS = valorEnv('SMTP_STARTTLS', 'false');
+
 const soVerificar = process.argv.includes('--verificar');
 
 /** Divulga o resultado: `problemas` acumulado e o que foi encontrado. */
@@ -130,6 +154,7 @@ class Admin {
   async remover(caminho) {
     return this.#pedir(caminho, { method: 'DELETE' });
   }
+
 }
 
 /**
@@ -161,14 +186,31 @@ function baseDoRealm({ realm, displayName, registro }) {
     registrationAllowed: registro,
     registrationEmailAsUsername: registro,
     resetPasswordAllowed: registro,
+    // Sem esta flag o Keycloak cria a conta e permite entrar sem confirmar
+    // que o endereco de e-mail realmente pertence a pessoa.
+    verifyEmail: true,
     loginWithEmailAllowed: true,
+    smtpServer: {
+      host: KEYCLOAK_SMTP_HOST,
+      port: SMTP_PORT,
+      from: SMTP_FROM_ADDRESS,
+      fromDisplayName: SMTP_FROM_NAME,
+      ssl: SMTP_SECURE,
+      starttls: SMTP_STARTTLS,
+      auth: SMTP_USER !== '' && SMTP_PASSWORD !== '' ? 'true' : 'false',
+      ...(SMTP_USER !== '' && SMTP_PASSWORD !== ''
+        ? { user: SMTP_USER, password: SMTP_PASSWORD }
+        : {}),
+    },
     // `none` porque o ambiente local nao tem certificado. Producao usa
     // `external` e exige HTTPS; o validador de ambiente recusa este valor la.
     sslRequired: 'none',
     accessTokenLifespan: 300,
     ssoSessionIdleTimeout: 1200,
     ssoSessionMaxLifespan: 28800,
-    passwordPolicy: 'length(12) and notUsername and passwordHistory(3)',
+    passwordPolicy: LOCAL_DEMO
+      ? 'length(5) and passwordHistory(3)'
+      : 'length(12) and notUsername and passwordHistory(3)',
     bruteForceProtected: true,
     maxFailureWaitSeconds: 900,
     permanentLockout: false,
@@ -233,6 +275,21 @@ const CLIENTE = {
  */
 const CONTAS = {
   'sertania-ciudadanos': [
+    // A conta existe nos dois realms, mas continua sendo uma identidade
+    // separada: neste realm ela recebe apenas o perfil de cidadao e pode abrir
+    // e acompanhar pedidos. O mesmo login local facilita a demonstracao sem
+    // conceder acesso a fila institucional.
+    ...(APP_ADMIN_USERNAME !== ''
+      ? [
+          {
+            entrada: APP_ADMIN_USERNAME,
+            senha: APP_ADMIN_PASSWORD,
+            email: ADMIN_EMAIL,
+            nome: 'Administrador',
+            sobrenome: 'Cidadao',
+          },
+        ]
+      : []),
     {
       entrada: 'cidadao.a@exemplo.invalid',
       senha: 'CidadaoA!2026-demo',
@@ -250,8 +307,8 @@ const CONTAS = {
   ],
   'sertania-servidores': [
     {
-      entrada: ADMIN_EMAIL,
-      senha: 'admin-local-apenas',
+      entrada: APP_ADMIN_USERNAME,
+      senha: APP_ADMIN_PASSWORD,
       email: ADMIN_EMAIL,
       nome: 'Administrador',
       sobrenome: 'Demonstracao',
@@ -446,9 +503,24 @@ async function garantirRealm(admin, definicao) {
     // Compara as duas colunas porque o realm de cidadaos usa o e-mail como
     // username. Comparar so o username faria o script tentar recriar uma conta
     // que ja existe, e o Keycloak recusa com 409 pelo e-mail duplicado.
-    const existe = usuarios.find(
+    let existe = usuarios.find(
       (u) => u.username === conta.entrada || u.email === conta.email,
     );
+    if (
+      existe !== undefined &&
+      LOCAL_DEMO &&
+      realm === (env['KEYCLOAK_REALM_SERVERS'] ?? 'sertania-servidores') &&
+      conta.email === ADMIN_EMAIL &&
+      existe.username !== APP_ADMIN_USERNAME
+    ) {
+      const removida = await admin.remover(`/realms/${realm}/users/${existe.id}`);
+      if (!removida.ok) {
+        falhar(`conta administrativa antiga -> HTTP ${removida.status} ${await removida.text()}`);
+      } else {
+        registrar(`conta administrativa antiga removida para migrar o login ${APP_ADMIN_USERNAME}`);
+        existe = undefined;
+      }
+    }
     if (existe !== undefined) {
       // Reaplicar tambem as contas que ja existem: sem isto, um realm criado
       // por uma versao anterior do script ficaria para sempre com o estado

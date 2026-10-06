@@ -18,10 +18,15 @@
  *    publicado apresenta compromisso de atendimento. Sem esse sinal na tela, um
  *    prazo inventado aparece com a mesma aparencia de um prazo oficial.
  */
-import { Controller, Get, HttpCode } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post } from '@nestjs/common';
 import { Database } from '../database/typed-query';
 import { CurrentSession } from '../auth/session.guard';
 import type { SessionClaims } from '../auth/session.service';
+import {
+  CatalogAdminService,
+  type CatalogServicePayload,
+  type CatalogUnitPayload,
+} from './catalog-admin.service';
 
 /** Prazo que se aplica ao servico, como a interface precisa exibi-lo. */
 export interface CatalogoPrazo {
@@ -58,7 +63,10 @@ export interface CatalogoSecretariat {
 
 @Controller('api/v1')
 export class CatalogController {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly admin: CatalogAdminService,
+  ) {}
 
   /**
    * Catalogo agrupado por secretaria.
@@ -88,6 +96,36 @@ export class CatalogController {
     // "nenhum servico disponivel" e nao um 500: as duas coisas pedem respostas
     // diferentes de quem opera e de quem usa.
     return { secretariats: linhas.map((linha) => linha.secretaria) };
+  }
+
+  @Get('admin/catalog')
+  async adminCatalog(@CurrentSession() session: SessionClaims | undefined) {
+    return this.admin.read(session);
+  }
+
+  @Post('admin/catalog/units')
+  async createUnit(
+    @Body() body: CatalogUnitPayload,
+    @CurrentSession() session: SessionClaims | undefined,
+  ) {
+    return this.admin.createUnit(session, body);
+  }
+
+  @Post('admin/catalog/services')
+  async createService(
+    @Body() body: CatalogServicePayload,
+    @CurrentSession() session: SessionClaims | undefined,
+  ) {
+    return this.admin.createService(session, body);
+  }
+
+  @Post('admin/catalog/services/:id')
+  async updateService(
+    @Param('id') id: string,
+    @Body() body: CatalogServicePayload,
+    @CurrentSession() session: SessionClaims | undefined,
+  ) {
+    return this.admin.updateService(session, id, body);
   }
 }
 

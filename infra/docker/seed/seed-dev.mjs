@@ -78,7 +78,8 @@ function falhar(mensagem) {
 /**
  * Catalogo de demonstracao.
  *
- * As tres Secretarias sao as da especificacao. Cada uma tem um servico, e os
+ * As cinco Secretarias cobrem os principais atendimentos demonstrativos. Cada
+ * uma tem servicos publicados, unidades e uma equipe, e os
  * tres casos sao escolhidos de proposito, porque cada um exercita uma
  * regra diferente da politica de autorizacao:
  *
@@ -88,6 +89,8 @@ function falhar(mensagem) {
  *   precisa ter NEGADO, mesmo indo direto pela URL.
  * - Educacao: exige representacao. E o caso em que o vinculo inclui a equipe
  *   que responde, e o cidadao precisa saber disso.
+ * - Desenvolvimento Social e Agricultura: ampliam o catalogo para alem do
+ *   primeiro fluxo e exercitam a troca de contexto do administrador.
  */
 const CATALOGO = [
   {
@@ -137,7 +140,10 @@ const CATALOGO = [
     },
     sla: { name: 'Saude - 3 dias uteis', minutes: 360, value: 3, unit: 'BUSINESS_DAYS', published: true },
     team: 'Agendamento',
-    servidores: [{ usuario: 'servidor.saude@exemplo.invalid', papel: 'ATTENDANT' }],
+    servidores: [
+      { usuario: 'servidor.saude@exemplo.invalid', papel: 'ATTENDANT' },
+      { usuario: ADMIN_EMAIL, papel: 'SECRETARY_MANAGER' },
+    ],
   },
   {
     secretariat: {
@@ -160,7 +166,49 @@ const CATALOGO = [
     },
     sla: { name: 'Educacao - 10 dias uteis', minutes: 1440, value: 10, unit: 'BUSINESS_DAYS', published: false },
     team: 'Matricula',
-    servidores: [],
+    servidores: [{ usuario: ADMIN_EMAIL, papel: 'SECRETARY_MANAGER' }],
+  },
+  {
+    secretariat: {
+      slug: 'desenvolvimento-social',
+      name: 'Secretaria de Desenvolvimento Social',
+      description: 'Protecao social, Cadastro Unico e atendimento as familias.',
+    },
+    service: {
+      slug: 'cadastro-unico',
+      name: 'Orientacao sobre Cadastro Unico',
+      description: 'Tire duvidas sobre inscricao, atualizacao e documentos do Cadastro Unico.',
+      guidance:
+        'Nao envie senhas ou documentos pessoais no campo de texto. A equipe orientara o proximo passo e a unidade adequada.',
+      classification: 'RESTRICTED_PERSONAL',
+      requiresRepresentation: false,
+      maxAttachments: 3,
+      unit: { name: 'CRAS Centro', locality: 'Centro' },
+    },
+    sla: { name: 'Social - 7 dias uteis', minutes: 960, value: 7, unit: 'BUSINESS_DAYS', published: true },
+    team: 'Cadastro e beneficios',
+    servidores: [{ usuario: ADMIN_EMAIL, papel: 'SECRETARY_MANAGER' }],
+  },
+  {
+    secretariat: {
+      slug: 'agricultura-meio-ambiente',
+      name: 'Secretaria de Agricultura e Meio Ambiente',
+      description: 'Apoio ao produtor, feiras, arborizacao e cuidado ambiental.',
+    },
+    service: {
+      slug: 'apoio-produtor-rural',
+      name: 'Apoio ao produtor rural',
+      description: 'Solicite orientacoes sobre feiras, cadastro de produtor e servicos rurais.',
+      guidance:
+        'Descreva a localidade e o tipo de apoio necessario. A equipe encaminhara a orientacao ou visita adequada.',
+      classification: 'PUBLIC_APPROVED',
+      requiresRepresentation: false,
+      maxAttachments: 4,
+      unit: { name: 'Atendimento Rural', locality: 'Zona Rural' },
+    },
+    sla: { name: 'Agricultura - 8 dias uteis', minutes: 1200, value: 8, unit: 'BUSINESS_DAYS', published: true },
+    team: 'Atendimento ao produtor',
+    servidores: [{ usuario: ADMIN_EMAIL, papel: 'SECRETARY_MANAGER' }],
   },
 ];
 
@@ -597,6 +645,24 @@ async function criarVinculos(cliente, item, ids, emTransacao, apenasVerificar) {
           [userId],
         );
       } else {
+        // A conta administrativa local pode trocar de username durante a
+        // migracao do demonstrativo (por exemplo, de e-mail para `admin`).
+        // Reaproveitar o vinculo pelo e-mail evita criar um segundo usuario
+        // interno e atualiza somente o subject que o Keycloak realmente emite.
+        const porEmail = await cliente.query(
+          `SELECT u."id" FROM "users" u
+             JOIN "external_identities" e ON e."user_id" = u."id"
+            WHERE e."email" = $1 AND e."realm" = $2`,
+          [email, realm],
+        );
+        if (porEmail.rows.length > 0) {
+          userId = porEmail.rows[0].id;
+          await cliente.query(
+            `UPDATE "external_identities" SET "subject" = $1, "issuer" = $2, "email" = $3
+              WHERE "user_id" = $4 AND "realm" = $5`,
+            [subject, issuer, email, userId, realm],
+          );
+        } else {
         const criado = await cliente.query(
           `INSERT INTO "users" ("is_citizen", "is_server") VALUES (false, true) RETURNING "id"`,
         );
@@ -606,6 +672,7 @@ async function criarVinculos(cliente, item, ids, emTransacao, apenasVerificar) {
            VALUES ($1, $2, $3, $4, $5)`,
           [userId, issuer, subject, realm, email],
         );
+        }
       }
 
       const vinculo = await cliente.query(

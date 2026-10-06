@@ -1,6 +1,26 @@
 import { DataSource, type DataSourceOptions } from 'typeorm';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { entities } from './entities';
 import { migrations } from './migrations';
+
+/**
+ * A CLI do TypeORM nao passa pelo ConfigModule do NestJS. Carregar o arquivo
+ * aqui deixa `pnpm db:migrate` e `pnpm db:revert` usarem a mesma configuracao
+ * do `iniciar-app.bat`, sem sobrescrever variaveis ja fornecidas pelo shell.
+ */
+function carregarAmbienteLocal(): void {
+  const candidatos = [
+    resolve(process.cwd(), '.env'),
+    resolve(process.cwd(), '../../.env'),
+    resolve(__dirname, '../../../.env'),
+    resolve(__dirname, '../../../../.env'),
+  ];
+  const arquivo = candidatos.find((candidato) => existsSync(candidato));
+  if (arquivo !== undefined) process.loadEnvFile(arquivo);
+}
+
+carregarAmbienteLocal();
 
 /**
  * Fonte de dados usada pelas migrations (especificacao secao 11 e 18).

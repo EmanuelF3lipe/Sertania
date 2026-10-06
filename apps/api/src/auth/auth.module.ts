@@ -13,6 +13,7 @@ import { KeycloakAdminService } from './keycloak-admin.service';
 import { MailService } from './mail.service';
 import { ServerOnboardingController } from './server-onboarding.controller';
 import { ServerOnboardingService } from './server-onboarding.service';
+import { SmtpSettingsService } from './smtp-settings.service';
 
 @Module({
   imports: [ConfigModule],
@@ -20,6 +21,7 @@ import { ServerOnboardingService } from './server-onboarding.service';
   providers: [
     AuthorizationStateStore,
     KeycloakAdminService,
+    SmtpSettingsService,
     MailService,
     ServerOnboardingService,
     {
@@ -52,6 +54,6 @@ import { ServerOnboardingService } from './server-onboarding.service';
         } satisfies OidcSettings),
     },
   ],
-  exports: [OidcService, AuthorizationStateStore],
+  exports: [OidcService, AuthorizationStateStore, MailService],
 })
 export class AuthModule {}

@@ -12,13 +12,9 @@ import { AuthorizationService } from '../authorization/authorization.service';
 import { KeycloakAdminService } from './keycloak-admin.service';
 import { MailService } from './mail.service';
 import { ConfigService } from '@nestjs/config';
+import { SmtpSettingsService } from './smtp-settings.service';
 
-const ROLES = new Set([
-  'ATTENDANT',
-  'OPERATIONAL_TEAM',
-  'SECRETARY_MANAGER',
-  'CENTRAL_MANAGEMENT',
-]);
+const ROLES = new Set(['ATTENDANT', 'OPERATIONAL_TEAM', 'SECRETARY_MANAGER', 'CENTRAL_MANAGEMENT']);
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
@@ -36,6 +32,7 @@ export class ServerOnboardingService {
     private readonly keycloak: KeycloakAdminService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    private readonly smtp: SmtpSettingsService,
   ) {}
 
   private hash(value: string): string {
@@ -119,7 +116,13 @@ export class ServerOnboardingService {
         if (user === undefined) throw new Error('Usuario institucional nao criado');
         await tx.run(
           `INSERT INTO "external_identities" ("user_id","issuer","subject","realm","email") VALUES ($1,$2,$3,$4,$5)`,
-          [user.id, issuer, keycloakUserId, this.config.get<string>('KEYCLOAK_REALM_SERVERS', 'sertania-servidores'), email],
+          [
+            user.id,
+            issuer,
+            keycloakUserId,
+            this.config.get<string>('KEYCLOAK_REALM_SERVERS', 'sertania-servidores'),
+            email,
+          ],
         );
         await tx.run(
           `INSERT INTO "memberships" ("user_id","role","secretariat_id","unit_ids","team_ids") VALUES ($1,$2,$3,$4,'{}')`,
@@ -128,7 +131,16 @@ export class ServerOnboardingService {
         const rows = await tx.run<{ id: string }>(
           `INSERT INTO "server_invitations" ("user_id","email","role","secretariat_id","unit_id","token_hash","expires_at","created_by")
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING "id"`,
-          [user.id, email, role, input.secretariatId, input.unitId, tokenHash, expiresAt, input.session?.userId],
+          [
+            user.id,
+            email,
+            role,
+            input.secretariatId,
+            input.unitId,
+            tokenHash,
+            expiresAt,
+            input.session?.userId,
+          ],
         );
         const row = rows[0];
         if (row === undefined) throw new Error('Convite institucional nao criado');
@@ -144,7 +156,9 @@ export class ServerOnboardingService {
     return { invitationId, email, expiresAt: expiresAt.toISOString() };
   }
 
-  private async reissueInvitation(invitationId: string): Promise<{ invitationId: string; email: string; expiresAt: string }> {
+  private async reissueInvitation(
+    invitationId: string,
+  ): Promise<{ invitationId: string; email: string; expiresAt: string }> {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + this.invitationTtlMs());
     const rows = await this.db.run<{ email: string; role: string }>(
@@ -177,8 +191,8 @@ export class ServerOnboardingService {
   }> {
     if (session === undefined || !session.isServer) throw new ForbiddenException();
     const subject = await this.authorization.subjectFor(session, new Date());
-    const managed = subject.memberships.filter((membership) =>
-      membership.role === 'SECRETARY_MANAGER' || membership.role === 'TECH_ADMIN',
+    const managed = subject.memberships.filter(
+      (membership) => membership.role === 'SECRETARY_MANAGER' || membership.role === 'TECH_ADMIN',
     );
     if (managed.length === 0) throw new ForbiddenException();
     const secretariatIds = [...new Set(managed.map((membership) => membership.secretariatId))];
@@ -218,41 +232,140 @@ export class ServerOnboardingService {
   async dashboard(session: SessionClaims | undefined): Promise<{
     total: number;
     completed: number;
+    open: number;
+    waitingCitizen: number;
+    urgent: number;
     byState: ReadonlyArray<{ state: string; total: number }>;
+    bySecretariat: ReadonlyArray<{ id: string; name: string; total: number; open: number }>;
+    byService: ReadonlyArray<{ name: string; total: number }>;
+    recent: ReadonlyArray<{
+      id: string;
+      protocol: string;
+      serviceName: string;
+      secretariatName: string;
+      state: string;
+      createdAt: string;
+      priority: string;
+    }>;
   }> {
     if (session === undefined || !session.isServer) throw new ForbiddenException();
     const subject = await this.authorization.subjectFor(session, new Date());
     const central = subject.memberships.some((item) => item.role === 'CENTRAL_MANAGEMENT');
-    const managed = subject.memberships
-      .filter((item) => item.role === 'SECRETARY_MANAGER')
-      .map((item) => item.secretariatId);
-    if (!central && managed.length === 0) throw new ForbiddenException();
-    const params: unknown[] = [];
-    const scope = central ? '' : 'WHERE r."secretariat_id" = ANY($1::uuid[])';
-    if (!central) params.push([...new Set(managed)]);
-    const rows = await this.db.run<{ state: string; total: number }>(
-      `SELECT r."state", count(*)::int AS "total" FROM "requests" r ${scope} GROUP BY r."state" ORDER BY r."state"`,
-      params,
+    const managed = subject.memberships.filter(
+      (item) =>
+        item.role === 'SECRETARY_MANAGER' &&
+        (subject.currentContext === null ||
+          subject.currentContext.membershipId === item.membershipId),
     );
-    const total = rows.reduce((sum, row) => sum + Number(row.total), 0);
-    const completed = rows.find((row) => row.state === 'COMPLETED')?.total ?? 0;
-    return { total, completed: Number(completed), byState: rows.map((row) => ({ state: row.state, total: Number(row.total) })) };
+    if (!central && managed.length === 0) throw new ForbiddenException();
+
+    const scopeParams: unknown[] = [];
+    const where = central
+      ? 'TRUE'
+      : managed
+          .map((membership) => {
+            const secretariatParameter = scopeParams.push(membership.secretariatId);
+            const unitPredicate =
+              membership.unitIds.length === 0
+                ? 'TRUE'
+                : `r."unit_id" = ANY($${scopeParams.push(membership.unitIds)}::uuid[])`;
+            return `(r."secretariat_id" = $${secretariatParameter} AND ${unitPredicate})`;
+          })
+          .join(' OR ');
+    const params: unknown[] = [...scopeParams];
+    const secretariatIds = [...new Set(managed.map((item) => item.secretariatId))];
+    const [summary, rows, bySecretariat, byService, recent] = await Promise.all([
+      this.db.run<{ total: number; completed: number; open: number; waiting_citizen: number; urgent: number }>(
+        `SELECT count(*)::int AS "total",
+                count(*) FILTER (WHERE r."state" = 'COMPLETED')::int AS "completed",
+                count(*) FILTER (WHERE r."state" NOT IN ('COMPLETED','CANCELED','DRAFT'))::int AS "open",
+                count(*) FILTER (WHERE r."state" = 'WAITING_CITIZEN')::int AS "waiting_citizen",
+                count(*) FILTER (WHERE r."priority" = 'URGENT')::int AS "urgent"
+           FROM "requests" r WHERE ${where} AND r."state" <> 'DRAFT'`,
+        params,
+      ),
+      this.db.run<{ state: string; total: number }>(
+        `SELECT r."state", count(*)::int AS "total"
+           FROM "requests" r WHERE ${where} AND r."state" <> 'DRAFT'
+          GROUP BY r."state" ORDER BY r."state"`,
+        params,
+      ),
+      this.db.run<{ id: string; name: string; total: number; open: number }>(
+        `SELECT s."id",s."name",count(r."id")::int AS "total",
+                count(r."id") FILTER (WHERE r."state" NOT IN ('COMPLETED','CANCELED','DRAFT'))::int AS "open"
+           FROM "secretariats" s LEFT JOIN "requests" r
+             ON r."secretariat_id" = s."id" AND (${where}) AND r."state" <> 'DRAFT'
+          WHERE s."active" = true ${central ? '' : `AND s."id" = ANY($${params.length + 1}::uuid[])`}
+          GROUP BY s."id",s."name" ORDER BY "total" DESC,s."name"`,
+        central ? params : [...params, secretariatIds],
+      ),
+      this.db.run<{ name: string; total: number }>(
+        `SELECT sv."name",count(*)::int AS "total"
+           FROM "requests" r JOIN "service_versions" sv ON sv."id" = r."service_version_id"
+           WHERE ${where} AND r."state" <> 'DRAFT'
+          GROUP BY sv."name" ORDER BY "total" DESC,sv."name" LIMIT 8`,
+        params,
+      ),
+      central
+        ? Promise.resolve([] as ReadonlyArray<Record<string, unknown>>)
+        : this.db.run(
+            `SELECT r."id",r."protocol",sv."name" AS "service_name",s."name" AS "secretariat_name",
+                    r."state",r."created_at",r."priority"
+               FROM "requests" r
+               JOIN "service_versions" sv ON sv."id" = r."service_version_id"
+               JOIN "secretariats" s ON s."id" = r."secretariat_id"
+              WHERE ${where} AND r."state" <> 'DRAFT'
+              ORDER BY r."created_at" DESC LIMIT 8`,
+            params,
+          ),
+    ]);
+    const firstSummary = summary[0];
+    return {
+      total: Number(firstSummary?.total ?? 0),
+      completed: Number(firstSummary?.completed ?? 0),
+      open: Number(firstSummary?.open ?? 0),
+      waitingCitizen: Number(firstSummary?.waiting_citizen ?? 0),
+      urgent: Number(firstSummary?.urgent ?? 0),
+      byState: rows.map((row) => ({ state: row.state, total: Number(row.total) })),
+      bySecretariat: bySecretariat.map((row) => ({
+        id: row.id,
+        name: row.name,
+        total: Number(row.total),
+        open: Number(row.open),
+      })),
+      byService: byService.map((row) => ({ name: row.name, total: Number(row.total) })),
+      recent: recent.map((row) => ({
+        id: String(row['id']),
+        protocol: String(row['protocol']),
+        serviceName: String(row['service_name']),
+        secretariatName: String(row['secretariat_name']),
+        state: String(row['state']),
+        createdAt: String(row['created_at']),
+        priority: String(row['priority']),
+      })),
+    };
   }
 
-  async sessionSetting(session: SessionClaims | undefined): Promise<{ absoluteTtlSeconds: number }> {
+  async sessionSetting(
+    session: SessionClaims | undefined,
+  ): Promise<{ absoluteTtlSeconds: number }> {
     await this.requireManager(session);
     const rows = await this.db.run<{ value: string }>(
       `SELECT "value" FROM "system_settings" WHERE "key" = 'server_session_absolute_ttl_seconds'`,
     );
     const value = Number(rows[0]?.value);
     return {
-      absoluteTtlSeconds: Number.isInteger(value) && value > 0
-        ? value
-        : Number(this.config.get<string>('SESSION_ABSOLUTE_TTL_SECONDS', '28800')),
+      absoluteTtlSeconds:
+        Number.isInteger(value) && value > 0
+          ? value
+          : Number(this.config.get<string>('SESSION_ABSOLUTE_TTL_SECONDS', '28800')),
     };
   }
 
-  async updateSessionSetting(session: SessionClaims | undefined, seconds: number): Promise<{ absoluteTtlSeconds: number }> {
+  async updateSessionSetting(
+    session: SessionClaims | undefined,
+    seconds: number,
+  ): Promise<{ absoluteTtlSeconds: number }> {
     await this.requireManager(session);
     if (!Number.isInteger(seconds) || seconds < 900 || seconds > 604800) {
       throw new BadRequestException('O prazo deve ficar entre 15 minutos e 7 dias.');
@@ -263,6 +376,28 @@ export class ServerOnboardingService {
       [String(seconds), session?.userId],
     );
     return { absoluteTtlSeconds: seconds };
+  }
+
+  async smtpSettings(session: SessionClaims | undefined) {
+    await this.requireManager(session);
+    return this.smtp.publicSettings();
+  }
+
+  async updateSmtpSettings(session: SessionClaims | undefined, email: string, appPassword: string) {
+    await this.requireManager(session);
+    const settings = await this.smtp.saveGmail(email, appPassword, session?.userId ?? '');
+    await this.keycloak.updateSmtp(settings);
+    return this.smtp.publicSettings();
+  }
+
+  async testSmtp(session: SessionClaims | undefined): Promise<{ sentTo: string }> {
+    await this.requireManager(session);
+    const settings = await this.smtp.current();
+    if (settings.user === '' || settings.password === '') {
+      throw new BadRequestException('Configure o e-mail antes de enviar um teste.');
+    }
+    await this.mail.sendTest(settings.user);
+    return { sentTo: settings.user };
   }
 
   private async requireManager(session: SessionClaims | undefined): Promise<void> {
@@ -289,7 +424,10 @@ export class ServerOnboardingService {
     };
   }
 
-  async verifyHuman(token: string, turnstileToken: string): Promise<{ code: string; expiresAt: string }> {
+  async verifyHuman(
+    token: string,
+    turnstileToken: string,
+  ): Promise<{ code: string; expiresAt: string }> {
     await this.verifyTurnstile(turnstileToken);
     const now = new Date();
     return this.db.transaction(async (tx) => {
@@ -301,7 +439,11 @@ export class ServerOnboardingService {
         [this.tokenHash(token)],
       );
       const row = rows[0];
-      if (row === undefined || row['status'] !== 'PENDING' || new Date(String(row['expires_at'])) <= now) {
+      if (
+        row === undefined ||
+        row['status'] !== 'PENDING' ||
+        new Date(String(row['expires_at'])) <= now
+      ) {
         throw new NotFoundException('Convite expirado ou inexistente.');
       }
       const code = String(randomInt(10_000_000, 100_000_000));
@@ -330,20 +472,31 @@ export class ServerOnboardingService {
         [this.tokenHash(token)],
       );
       const row = rows[0];
-      if (row === undefined || row['status'] !== 'PENDING' || new Date(String(row['expires_at'])) <= now) {
+      if (
+        row === undefined ||
+        row['status'] !== 'PENDING' ||
+        new Date(String(row['expires_at'])) <= now
+      ) {
         throw new NotFoundException('Convite expirado ou inexistente.');
       }
       const storedHash = row['verification_code_hash'];
       const verificationExpiresAt = row['verification_expires_at'];
-      const verificationExpiry = verificationExpiresAt instanceof Date
-        ? verificationExpiresAt
-        : new Date(typeof verificationExpiresAt === 'string' ? verificationExpiresAt : '');
-      if (typeof storedHash !== 'string' || verificationExpiresAt === null || verificationExpiresAt === undefined ||
-          verificationExpiry <= now || row['verification_verified_at'] === null) {
+      const verificationExpiry =
+        verificationExpiresAt instanceof Date
+          ? verificationExpiresAt
+          : new Date(typeof verificationExpiresAt === 'string' ? verificationExpiresAt : '');
+      if (
+        typeof storedHash !== 'string' ||
+        verificationExpiresAt === null ||
+        verificationExpiresAt === undefined ||
+        verificationExpiry <= now ||
+        row['verification_verified_at'] === null
+      ) {
         throw new BadRequestException('Conclua a verificacao antes de criar a senha.');
       }
       const attempts = Number(row['verification_attempts'] ?? 0);
-      if (attempts >= 5) throw new BadRequestException('Codigo bloqueado. Gere outro codigo pela verificacao.');
+      if (attempts >= 5)
+        throw new BadRequestException('Codigo bloqueado. Gere outro codigo pela verificacao.');
       if (!this.equalHash(storedHash, this.hash(code.trim()))) {
         await tx.run(
           `UPDATE "server_invitations" SET "verification_attempts" = "verification_attempts" + 1, "updated_at" = now() WHERE "id" = $1`,
@@ -352,7 +505,10 @@ export class ServerOnboardingService {
         throw new BadRequestException('Codigo de verificacao invalido.');
       }
 
-      await this.keycloak.activateWithPassword(String(row['external_subject'] ?? row['user_id']), password);
+      await this.keycloak.activateWithPassword(
+        String(row['external_subject'] ?? row['user_id']),
+        password,
+      );
       await tx.run(
         `UPDATE "server_invitations" SET "status" = 'ACCEPTED', "accepted_at" = now(),
                 "verification_code_hash" = NULL, "verification_verified_at" = NULL, "updated_at" = now()
@@ -369,7 +525,11 @@ export class ServerOnboardingService {
       [this.tokenHash(token)],
     );
     const row = rows[0];
-    if (row === undefined || row['status'] !== 'PENDING' || new Date(String(row['expires_at'])) <= new Date()) {
+    if (
+      row === undefined ||
+      row['status'] !== 'PENDING' ||
+      new Date(String(row['expires_at'])) <= new Date()
+    ) {
       throw new NotFoundException('Convite expirado ou inexistente.');
     }
     return row;
@@ -377,14 +537,21 @@ export class ServerOnboardingService {
 
   private async verifyTurnstile(token: string): Promise<void> {
     const secret = this.config.get<string>('TURNSTILE_SECRET_KEY', '');
-    if (this.config.get<string>('NODE_ENV', 'development') !== 'production' && secret === '' && token === 'dev-turnstile-bypass') return;
-    if (secret === '' || token.trim() === '') throw new BadRequestException('Verificacao humana ausente.');
+    if (
+      this.config.get<string>('NODE_ENV', 'development') !== 'production' &&
+      secret === '' &&
+      token === 'dev-turnstile-bypass'
+    )
+      return;
+    if (secret === '' || token.trim() === '')
+      throw new BadRequestException('Verificacao humana ausente.');
     const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ secret, response: token }),
     });
-    if (!response.ok) throw new BadRequestException('Nao foi possivel validar a verificacao humana.');
+    if (!response.ok)
+      throw new BadRequestException('Nao foi possivel validar a verificacao humana.');
     const result = (await response.json()) as { success?: unknown };
     if (result.success !== true) throw new BadRequestException('Verificacao humana recusada.');
   }

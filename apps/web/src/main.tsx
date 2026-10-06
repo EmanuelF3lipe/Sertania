@@ -24,13 +24,14 @@ import {
   DetalhePedido,
   MinhasSolicitacoes,
   NovaSolicitacao,
-  TelaEntrada,
   formatarData,
 } from './telas/cidadao';
+import { LandingPage } from './telas/landing';
 import { AreaOperacao } from './telas/operacao';
 import { CadastroServidor, VerificacaoServidor } from './telas/onboarding';
 import { Configuracoes } from './telas/configuracoes';
 import { ProvedorAcessibilidade } from './acessibilidade';
+import { ProvedorTema } from './tema';
 import './estilos.css';
 
 const elemento = document.getElementById('raiz');
@@ -74,7 +75,7 @@ function Aplicacao() {
   }
 
   if (fase === 'anonimo') {
-    return <TelaEntrada destino={rota} />;
+    return <LandingPage destino={rota} />;
   }
 
   const cidadao = fase === 'cidadao';
@@ -89,6 +90,7 @@ function Aplicacao() {
           podeAbrir={false}
           podeVerFila={pode?.viewQueue ?? false}
           podeGerirServidores={pode?.manageServerAccess ?? false}
+          podeGerirCatalogo={pode?.manageCatalog ?? false}
           podeVerDashboard={pode?.viewDashboard ?? false}
           homeHref={pode?.viewQueue ? '#/fila' : pode?.viewDashboard ? '#/dashboard' : '#/configuracoes'}
           sair={sair}
@@ -108,6 +110,7 @@ function Aplicacao() {
         podeAbrir={pode?.openRequest ?? false}
         podeVerFila={false}
         podeGerirServidores={false}
+        podeGerirCatalogo={false}
         podeVerDashboard={false}
         homeHref="#/minhas"
         sair={sair}
@@ -122,7 +125,7 @@ function Aplicacao() {
         {partes[0] !== 'configuracoes' && partes[0] !== 'nova' && partes[0] !== 'minhas' && partes[0] !== 'pedido' && (
           <MinhasSolicitacoes />
         )}
-        <footer className="dica" style={{ marginTop: '2rem' }}>
+        <footer className="dica cidadao-rodape">
           Dados de demonstracao. Em caso de problema, procure a prefeitura pelo
           telefone. Sessao iniciada em {formatarData(new Date().toISOString())}.
         </footer>
@@ -133,8 +136,10 @@ function Aplicacao() {
 
 createRoot(elemento).render(
   <StrictMode>
-    <ProvedorAcessibilidade>
-      <ProvedorSessao><Aplicacao /></ProvedorSessao>
-    </ProvedorAcessibilidade>
+    <ProvedorTema>
+      <ProvedorAcessibilidade>
+        <ProvedorSessao><Aplicacao /></ProvedorSessao>
+      </ProvedorAcessibilidade>
+    </ProvedorTema>
   </StrictMode>,
 );

@@ -17,6 +17,11 @@ export class ServerOnboardingController {
     return this.onboarding.sessionSetting(session);
   }
 
+  @Get('admin/settings/smtp')
+  async smtp(@CurrentSession() session: SessionClaims | undefined) {
+    return this.onboarding.smtpSettings(session);
+  }
+
   @Get('analytics/dashboard')
   async dashboard(@CurrentSession() session: SessionClaims | undefined) {
     return this.onboarding.dashboard(session);
@@ -30,9 +35,29 @@ export class ServerOnboardingController {
     return this.onboarding.updateSessionSetting(session, body.absoluteTtlSeconds ?? 0);
   }
 
+  @Post('admin/settings/smtp')
+  async updateSmtp(
+    @Body() body: { email?: string; appPassword?: string },
+    @CurrentSession() session: SessionClaims | undefined,
+  ) {
+    return this.onboarding.updateSmtpSettings(session, body.email ?? '', body.appPassword ?? '');
+  }
+
+  @Post('admin/settings/smtp/test')
+  async testSmtp(@CurrentSession() session: SessionClaims | undefined) {
+    return this.onboarding.testSmtp(session);
+  }
+
   @Post('admin/server-invitations')
   async createInvitation(
-    @Body() body: { email?: string; role?: string; accessType?: string; secretariatId?: string; unitId?: string },
+    @Body()
+    body: {
+      email?: string;
+      role?: string;
+      accessType?: string;
+      secretariatId?: string;
+      unitId?: string;
+    },
     @CurrentSession() session: SessionClaims | undefined,
   ) {
     return this.onboarding.createInvitation({

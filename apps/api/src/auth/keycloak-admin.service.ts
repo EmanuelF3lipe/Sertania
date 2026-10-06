@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { SmtpSettings } from './smtp-settings.service';
 
 interface KeycloakUser {
   readonly id?: string;
@@ -23,6 +24,10 @@ export class KeycloakAdminService {
     return this.config.get<string>('KEYCLOAK_REALM_SERVERS', 'sertania-servidores');
   }
 
+  private get citizenRealm(): string {
+    return this.config.get<string>('KEYCLOAK_REALM_CITIZENS', 'sertania-ciudadanos');
+  }
+
   private async adminToken(): Promise<string> {
     if (this.accessToken !== null && this.tokenExpiresAt > Date.now() + 10_000) {
       return this.accessToken;
@@ -44,7 +49,9 @@ export class KeycloakAdminService {
     }
     const payload = (await response.json()) as { access_token?: unknown; expires_in?: unknown };
     if (typeof payload.access_token !== 'string') {
-      throw new ServiceUnavailableException('Provedor institucional sem credencial administrativa.');
+      throw new ServiceUnavailableException(
+        'Provedor institucional sem credencial administrativa.',
+      );
     }
     this.accessToken = payload.access_token;
     this.tokenExpiresAt = Date.now() + Number(payload.expires_in ?? 60) * 1000;
@@ -68,7 +75,8 @@ export class KeycloakAdminService {
     const search = await this.request(
       `/admin/realms/${encodeURIComponent(this.realm)}/users?email=${encodeURIComponent(email)}`,
     );
-    if (!search.ok) throw new ServiceUnavailableException('Nao foi possivel consultar o provedor institucional.');
+    if (!search.ok)
+      throw new ServiceUnavailableException('Nao foi possivel consultar o provedor institucional.');
     const existing = (await search.json()) as KeycloakUser[];
     if (existing.some((user) => user.email?.toLowerCase() === email.toLowerCase())) {
       throw new ConflictException('Ja existe uma conta institucional para este e-mail.');
@@ -79,14 +87,15 @@ export class KeycloakAdminService {
       body: JSON.stringify({
         username: email,
         email,
-        emailVerified: true,
+        emailVerified: false,
         firstName: 'Servidor',
         lastName: 'Municipal',
         enabled: false,
         requiredActions: [],
       }),
     });
-    if (response.status === 409) throw new ConflictException('Ja existe uma conta institucional para este e-mail.');
+    if (response.status === 409)
+      throw new ConflictException('Ja existe uma conta institucional para este e-mail.');
     if (response.status !== 201) {
       throw new ServiceUnavailableException('Nao foi possivel criar a conta institucional.');
     }
@@ -99,7 +108,8 @@ export class KeycloakAdminService {
     );
     const users = (await verify.json()) as KeycloakUser[];
     const created = users.find((user) => user.email?.toLowerCase() === email.toLowerCase());
-    if (created?.id === undefined) throw new ServiceUnavailableException('Conta criada sem identificador.');
+    if (created?.id === undefined)
+      throw new ServiceUnavailableException('Conta criada sem identificador.');
     return created.id;
   }
 
@@ -114,10 +124,43 @@ export class KeycloakAdminService {
     }
     const enabled = await this.request(path, {
       method: 'PUT',
-      body: JSON.stringify({ enabled: true, requiredActions: [], emailVerified: true }),
+      // A senha foi criada pelo fluxo de convite, mas a conta so pode entrar
+      // depois que o Keycloak confirmar o endereco de e-mail.
+      body: JSON.stringify({
+        enabled: true,
+        requiredActions: ['VERIFY_EMAIL'],
+        emailVerified: false,
+      }),
     });
     if (!enabled.ok) {
       throw new ServiceUnavailableException('Nao foi possivel ativar a conta institucional.');
+    }
+  }
+
+  async updateSmtp(settings: SmtpSettings): Promise<void> {
+    const smtpServer = {
+      host: settings.host,
+      port: String(settings.port),
+      from: settings.fromAddress,
+      fromDisplayName: settings.fromName,
+      ssl: String(settings.secure),
+      starttls: String(settings.starttls),
+      auth: 'true',
+      user: settings.user,
+      password: settings.password,
+    };
+    for (const realm of [this.citizenRealm, this.realm]) {
+      const path = `/admin/realms/${encodeURIComponent(realm)}`;
+      const current = await this.request(path);
+      if (!current.ok)
+        throw new ServiceUnavailableException('Nao foi possivel consultar o realm de e-mail.');
+      const representation = (await current.json()) as Record<string, unknown>;
+      const response = await this.request(path, {
+        method: 'PUT',
+        body: JSON.stringify({ ...representation, smtpServer }),
+      });
+      if (!response.ok)
+        throw new ServiceUnavailableException('Nao foi possivel atualizar o SMTP do Keycloak.');
     }
   }
 }

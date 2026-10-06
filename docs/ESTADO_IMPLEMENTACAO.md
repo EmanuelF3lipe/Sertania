@@ -19,42 +19,43 @@ O backend executa contra a stack real. O **Marco A esta fechado** e o
 **Marco B (login real com Keycloak) esta implementado e verificado no
 navegador**, com uma ressalva importante na tabela abaixo.
 
-**216 testes passando.**
+**237 testes passando.**
 
 | Pacote | Testes | Arquivos | Resultado |
 | --- | --- | --- | --- |
 | `@sertania/contracts` | 109 | 5 | passando |
-| `@sertania/api` (unitarios) | 67 | 5 | passando |
-| `@sertania/api` (integracao, Postgres real) | 40 | 3 | passando |
-| **Total** | **216** | **13** | **passando** |
+| `@sertania/api` (unitarios) | 85 | 12 | passando |
+| `@sertania/api` (integracao, Postgres real) | 43 | 3 | passando |
+| **Total** | **237** | **20** | **passando** |
 
 Gates: `pnpm lint` 0 problemas, `pnpm typecheck` 0 erros, `pnpm build` sem erro.
 
-## Marco C - Interface (incompleto)
+## Marco C - Interface
 
 `apps/web` existe, com Vite, React e TypeScript no mesmo rigor da API. O fluxo do
 cidadao e a primeira versao da area institucional foram construidos. A identidade
-visual foi refeita para branco, azul-ciano e azul-marinho.
+visual foi refeita para branco e verde, incluindo o tema de login do Keycloak.
 
 ### Verificado no navegador, com login real
 
 | Passo | Evidencia |
 | --- | --- |
 | Tela de entrada | Duas entradas separadas, "Sou cidadao" e "Sou servidor" |
-| Login real | Formulario do Keycloak aceitou `cidadao.a@exemplo.invalid`; a sessao voltou e a interface reconheceu o cidadao |
+| Login real | Formulario do Keycloak aceitou `cidadao.a@exemplo.invalid` e `admin`; as sessoes de cidadao e servidor foram reconhecidas pela interface |
 | Estado vazio | "Voce ainda nao tem nenhuma solicitacao", com atalho para abrir a primeira |
 | Catalogo | As tres secretarias e os tres servicos vindos de `GET /catalog`, com o prazo em texto e o aviso de prazo simulado |
 | Assistencia | Passos 1 a 4, escolha de servico, descricao com validacao minima, e revisao com secretaria, servico, prazo e descricao |
 | Envio real | POST protegido por CSRF retornou 201 e protocolo `SER-2026-002064`; a lista e o detalhe retornaram o pedido sem nota interna |
-| Visual | Navegador renderizou a nova identidade branca/ciano e os estados responsivos |
+| Operacao real | Login institucional abriu a fila; detalhe, atribuicao, SLA server-side, comando de agendamento e exibicao da previsao foram exercitados |
+| Complementacao real | Pedido `SER-2026-002066` percorreu analise, pedido de informacao, mensagem cidadã e retorno para `IN_REVIEW`; a pausa persistida do SLA encerrou |
+| Visual | Navegador renderizou a identidade branco/verde e os estados responsivos; modo escuro persistiu em `localStorage` |
 
 ### O que NAO esta verificado
 
-- **Login institucional com MFA real.** A tela do servidor ainda esta bloqueada
-  pela configuracao TOTP do Keycloak 26.4, portanto a fila foi verificada por
-  compilacao e contrato, mas nao por uma sessao institucional real.
-- **Demonstracao com Playwright e a ausencia de sessao injetada.** Nao
-  executado.
+- **CAPTCHA real em producao.** O ambiente local usa o bypass de desenvolvimento
+  porque nao possui chaves Turnstile de producao.
+- **Demonstracao automatizada com Playwright.** O smoke test foi executado no
+  navegador interativo; ainda nao existe uma suite E2E Playwright versionada.
 
 ### Identificador institucional por e-mail
 
@@ -62,14 +63,18 @@ As contas de servidor agora entram com o e-mail como identificador visivel:
 
 - `servidor.saude@exemplo.invalid` / `ServidorSaude!2026-demo`
 - `servidor.infra@exemplo.invalid` / `ServidorInfra!2026-demo`
-- `admin@exemplo.invalid` / `admin-local-apenas` (gestor de demonstracao da Infraestrutura)
+- `admin` / `admin` (gestor de demonstracao da Infraestrutura)
+- `admin` / `admin` no realm cidadão (conta separada, somente como cidadão)
 
 O Keycloak confirmou no navegador o campo "Nome de usuário ou e-mail". O realm
 de servidores agora usa e-mail + senha, sem required action de autenticador
-móvel; as contas têm `requiredActions=[]` e somente credencial de senha.
+móvel. Contas demonstrativas têm `requiredActions=[]`; contas convidadas ficam
+com `VERIFY_EMAIL` até confirmarem o endereço no primeiro login.
 O administrador local não precisa de verificação adicional de e-mail.
-O administrador local também ficou com `admin@exemplo.invalid` e
-`emailVerified=true`, aplicado por `infra/docker/keycloak/provisionar.mjs`.
+O administrador local entra com `admin` / `admin`, mantém o e-mail verificado e
+é aplicado por `infra/docker/keycloak/provisionar.mjs`. A mesma combinação é
+provisionada no realm cidadão como outra identidade, sem vínculo ou permissão
+institucional. Essas credenciais são exclusivas do ambiente demonstrativo local.
 
 ### Primeiro acesso de servidor
 
@@ -79,7 +84,8 @@ grava o vínculo municipal e envia um convite pelo SMTP configurado. O convite
 leva à tela de criação de senha e mostra um QR para uma página de verificação
 humana com Turnstile. A verificação libera um código de oito dígitos, com dez
 minutos de validade e uso único. A senha é então registrada no Keycloak e a
-conta é ativada; o login seguinte continua sendo apenas e-mail + senha.
+conta é ativada com a required action `VERIFY_EMAIL`; o primeiro login envia a
+ confirmação por e-mail e só depois libera a sessão institucional.
 
 No desenvolvimento, quando as chaves Turnstile estão vazias, há um botão local
 de teste. Em produção, o bypass não existe e `TURNSTILE_SECRET_KEY` é
@@ -91,8 +97,9 @@ As áreas autenticadas de cidadão e servidor usam o menu de três barras. Ele
 oferece a tela inicial e as configurações; a área institucional também mostra
 fila, cadastro de servidores e dashboard conforme as capacidades devolvidas por
 `/auth/me`. Configurações possuem os presets **Padrão**, **Alto contraste**,
-**Texto ampliado** e **Menos movimento**. Somente a preferência visual é salva
-no navegador; sessão, tokens e dados autenticados continuam exclusivamente no
+**Texto ampliado**, **Menos movimento** e **Modo escuro**. O tema escuro também
+fica disponível no cabeçalho e na entrada pública, com preferência salva no
+navegador; sessão, tokens e dados autenticados continuam exclusivamente no
 servidor.
 
 O formulário de convite permite selecionar **Usuário operacional** ou
@@ -108,7 +115,22 @@ detalhe do pedido, seletor de contexto quando ha mais de um vinculo, historico
 e confirmacao de comandos. Os comandos exibidos chegam de
 `allowedCommandsFrom` no DTO do servidor; a autorizacao e a versao continuam
 sendo conferidas pelo backend. Conflito de versao mostra mensagem para
-recarregar, em vez de repetir uma acao com dados antigos.
+recarregar, em vez de repetir uma acao com dados antigos. A fila e o detalhe
+mostram o progresso do SLA, pausa, atraso, vencimento e momento da fotografia;
+o percentual e calculado no servidor a partir da politica congelada e das
+pausas persistidas, com atualização periódica na tela.
+
+O ciclo seguinte acrescentou recursos de uso diário nos dois portais:
+
+- o cidadão pode recuperar um rascunho da nova solicitação na mesma aba, filtrar
+  o histórico, copiar ou compartilhar o protocolo e imprimir o comprovante;
+  fotos continuam fora do armazenamento local e precisam ser escolhidas no envio;
+- a operação possui visões rápidas de **Minha fila**, **Sem responsável** e
+  **Urgentes**, atualização manual com horário da última leitura e exportação
+  CSV da página autorizada;
+- gestores podem selecionar vários pedidos visíveis e assumi-los em lote. Cada
+  atribuição usa a versão otimista do pedido e a API revalida secretaria,
+  unidade, vínculo ativo e permissão antes de atualizar o banco.
 
 ### Correcoes deste ciclo
 
@@ -121,6 +143,23 @@ recarregar, em vez de repetir uma acao com dados antigos.
   ao TTL absoluto configurado.
 - Lista, fila e detalhe passaram a receber nome do servico, secretaria, estado
   em linguagem simples, data e comandos legais do backend.
+- A resposta de complementacao usa `PROVIDE_INFORMATION`, retorna ao estado
+  anterior registrado, marca a solicitacao como respondida e encerra a pausa de
+  SLA persistida.
+- O cancelamento durante `WAITING_CITIZEN` encerra a pausa aberta e marca a
+  solicitacao de informacao como `CANCELLED`, sem deixar relogio ou pendencia
+  aberta no banco.
+- A negativa de reabertura registra a decisao sem substituir o resultado e a
+  justificativa da conclusao original; a aprovacao abre um novo ciclo.
+- `SCHEDULE` exige data futura, persiste a diferenca entre previsao e
+  agendamento efetivo e exibe a informacao no portal do cidadao e na operacao.
+- Conclusoes exibem ao cidadao o resultado traduzido, e comandos que exigem
+  justificativa nao podem ser confirmados com texto vazio.
+- A lista cidadã tem teste de contrato do controller garantindo que cada item
+  recebe a fotografia SLA calculada no servidor, incluindo vencimento, consumo,
+  compromisso publicado e instante `asOf`.
+- A CLI de migration carrega o `.env` da raiz quando executada diretamente,
+  sem depender apenas do script de inicializacao.
 
 ### Bugs encontrados construindo a interface
 
@@ -185,7 +224,7 @@ Resolvido na raiz, com tres pecas:
 - `.env.test` apontado para o banco de trabalho: `exit=1`, mensagem dizendo que
   os testes apagam o banco, e **nenhuma conexao aberta**.
 - `.env.test` removido: `exit=1` com a instrucao de copiar o exemplo.
-- Execucao normal: 40 testes passando, banco de trabalho com as mesmas contagens
+- Execucao normal: 43 testes passando, banco de trabalho com as mesmas contagens
   antes e depois, e o banco de teste com as 36 tabelas da migration.
 
 Os papeis de teste foram criados **sem nenhum privilegio**: `\du` mostra
@@ -223,9 +262,9 @@ o formulario de login do Keycloak, e o Keycloak de verdade.
 | Autenticacao real | Formulario do Keycloak aceitou `cidadao.a@exemplo.invalid`, e o navegador voltou para `http://localhost:5173/minhas-solicitacoes` |
 | Sessao criada | `GET /api/v1/auth/me` devolveu `{"authenticated":true,"isCitizen":true,"can":{"openRequest":true,...}}` |
 | Identidade no banco | `external_identities` com `realm = sertania-ciudadanos`, `subject` do token, e **zero** `memberships` |
-| Login institucional por e-mail | Conta `admin@exemplo.invalid` aceita no realm `sertania-servidores`, com `requiredActions=[]`, e-mail verificado e credencial de senha |
+| Login institucional administrativo | Conta `admin` / `admin` aceita no realm `sertania-servidores`, com `requiredActions=[]` e vínculo de gestão |
 | Excecao administrativa local | O administrador de demonstração não precisa verificar e-mail novamente; o vínculo `SECRETARY_MANAGER` está na Infraestrutura |
-| Primeiro acesso | Convite SMTP, código único após Turnstile/QR e criação de senha foram percorridos contra Mailpit e Keycloak |
+| Primeiro acesso | Convite SMTP, código único após Turnstile/QR, criação de senha e bloqueio na tela `Verificação de email` foram percorridos contra Mailpit e Keycloak |
 
 O fluxo atual é deliberadamente o modo demonstrativo solicitado: e-mail + senha.
 O antigo bloqueio de MFA/TOTP foi removido do realm de servidores e da validação
@@ -418,7 +457,8 @@ dois que produziu o `state` indefinido descrito adiante.
 - [ ] Resolucao de vinculo por `issuer + subject`
 - [ ] Rotacao de sessao no login e revogacao
 - [ ] Enderecos e cookies em desenvolvimento
-- [ ] Seeds idempotentes com as tres secretarias e perfis demonstrativos
+- [x] Seeds idempotentes com cinco secretarias, unidades, servicos e perfis
+      demonstrativos
 
 ## Etapas 1 e 2 do plano original
 
@@ -444,31 +484,43 @@ dois que produziu o `state` indefinido descrito adiante.
 - [x] Conclusao exigindo resultado e justificativa publica
 - [x] Entidades de solicitacao, conteudo, local, evento, mensagem, tarefa,
       ciclo, relacao e avaliacao
-- [ ] Endpoint de upload e download autenticado de anexos
-- [ ] Worker de notificacoes consumindo a outbox
-- [ ] Mensagens cidadao-servidor
-- [ ] Avaliacao de satisfacao
+- [~] Endpoint de upload e download autenticado de anexos: valida assinatura e
+      extensao, recusa PDF cifrado, envia para quarentena, inspeciona com
+      ClamAV, libera apenas arquivo limpo, aplica autorizacao e registra acesso
+      auditavel. Falta ainda teste de integracao multipart ponta a ponta.
+- [~] Worker de notificacoes consumindo a outbox: reserva eventos com
+      `FOR UPDATE SKIP LOCKED`, envia e-mail fora da transacao, registra entrega,
+      aplica retentativa com backoff e encerra apos cinco falhas. Falta teste
+      com SMTP e Postgres reais.
+- [~] Mensagens cidadao-servidor: conversa autenticada por solicitacao, corpo
+      cifrado em aplicacao, visibilidade publica/interna e autorizacao por
+      titular ou vinculo institucional. Falta teste de integracao HTTP real.
+- [~] Avaliacao de satisfacao: uma nota de 1 a 5 por ciclo e autor, disponivel
+      apos conclusao, com comentario opcional, autorizacao do titular e tela
+      cidada. Falta teste de integracao HTTP real.
 
 ## O que ainda NAO tem evidencia de execucao
 
-- **Login institucional completo, com segundo fator percorrido no navegador.** O
-  realm exige o segundo fator e a aplicacao recusa token sem ele, ambos
-  verificados. O que falta e o percurso inteiro: a tela de entrada manual do
-  TOTP do Keycloak 26.4 responde erro interno, entao nao da para configurar o
-  segundo fator sem um aplicativo autenticador de verdade. A regra esta
-  testada; o caminho completo nao foi executado.
+- **Politica de segundo fator em producao.** O ambiente demonstrativo local usa
+  e-mail e senha para permitir o smoke test administrativo; a exigencia de MFA,
+  caso seja adotada na homologacao, ainda precisa ser percorrida com um
+  autenticador real e a configuracao municipal definitiva.
 - **Reduzir o privilegio de `sertania_app`.** A conta de trabalho e
   SUPERUSUARIO, contrariando o que o compose e o `.env` afirmavam. Os
   comentarios foram corrigidos; a conta ainda nao. Ver
   `pendencia-conta-superusuario`.
-- **Upload e download de anexos pelo endpoint.** Politica e cliente de
-  antivirus existem e estao testados; nao ha controller nem fluxo de
-  quarentena ate liberacao.
-- **Worker de notificacoes.** A outbox e gravada na transacao, mas nenhum
-  processo consome a fila.
-- **Indicadores e paineis.**
-- **Frontend.** Nenhuma interface foi construida.
-- **Acessibilidade, carga e restauracao.**
+- **Upload e download de anexos ponta a ponta.** O controller e o fluxo de
+  quarentena ate liberacao ja existem; falta evidencia de teste multipart com
+  a API e o armazenamento reais.
+- **Worker de notificacoes ponta a ponta.** O processo separado e o consumidor
+  ja existem; falta evidencia com SMTP e Postgres reais.
+- **Indicadores e paineis avancados.** O dashboard agora tem indicadores por
+  estado, secretaria, servico, prioridade e recentes, com filtro por escopo;
+  ainda faltam mapas e exportacoes completos.
+- **Frontend automatizado.** As areas cidada e institucional, mensagens,
+  anexos, SLA, tema e acessibilidade existem; falta cobertura Playwright.
+- **Acessibilidade, carga e restauracao.** Os presets visuais existem; faltam
+  testes automatizados e ensaios operacionais.
 
 Nenhum destes deve ser declarado cumprido.
 
