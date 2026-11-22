@@ -1,0 +1,10 @@
+{
+  "name": "Sertânia Digital – Prefeitura de Sertânia",
+  "short_name": "Sertânia Digital",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f7f4",
+  "theme_color": "#11643a",
+  "lang": "pt-BR",
+  "icons": [{ "src": "/icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
