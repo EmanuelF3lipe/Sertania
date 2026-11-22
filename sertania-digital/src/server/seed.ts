@@ -94,12 +94,20 @@ function prng(semente: number) {
   };
 }
 
-export function semear(banco: Banco, opcoes: { demonstracao: boolean; quantidade?: number }): void {
+export type ModoInicial = 'demonstracao' | 'modelo' | 'limpo';
+
+/**
+ * - demonstracao: catalogo modelo + servidores e demandas ficticias (para conhecer o sistema)
+ * - modelo: catalogo modelo de secretarias/servicos para a prefeitura ajustar; sem pessoas nem demandas
+ * - limpo: so o minimo para funcionar (SAD + Protocolo Geral + localidades + feriados nacionais)
+ */
+export function semear(banco: Banco, opcoes: { modo: ModoInicial; quantidade?: number }): void {
   banco.tx(() => {
     const servicos: Array<{ id: number; setorId: number; secretariaId: number; prazo: number; prioridade: Prioridade; relatos: string[]; sigla: string; setor: string }> = [];
     const setores = new Map<string, number>();
     const secretarias = new Map<string, number>();
-    for (const sc of CATALOGO) {
+    const catalogo = opcoes.modo === 'limpo' ? CATALOGO.filter((c) => c.sigla === 'SAD') : CATALOGO;
+    for (const sc of catalogo) {
       const { id: scId } = banco.run('INSERT INTO secretarias (nome, sigla) VALUES (?,?)', sc.nome, sc.sigla);
       secretarias.set(sc.sigla, scId);
       for (const st of sc.setores) {
@@ -114,10 +122,10 @@ export function semear(banco: Banco, opcoes: { demonstracao: boolean; quantidade
         }
       }
     }
-    const locs = LOCALIDADES.map(([nome, tipo, lat, lng]) => ({ id: banco.run('INSERT INTO localidades (nome, tipo, lat, lng) VALUES (?,?,?,?)', nome, tipo, lat, lng).id, nome, tipo, lat, lng }));
+    const locs = LOCALIDADES.filter(([nome]) => opcoes.modo === 'demonstracao' || !nome.includes('(exemplo)')).map(([nome, tipo, lat, lng]) => ({ id: banco.run('INSERT INTO localidades (nome, tipo, lat, lng) VALUES (?,?,?,?)', nome, tipo, lat, lng).id, nome, tipo, lat, lng }));
     for (const [data, nome] of FERIADOS) banco.run('INSERT INTO feriados (data, nome) VALUES (?,?)', data, nome);
 
-    if (!opcoes.demonstracao) return;
+    if (opcoes.modo !== 'demonstracao') return;
 
     const senha = hashSenha(SENHA_DEMO);
     const usuarios: Array<[string, string, string, string | null, string | null]> = [

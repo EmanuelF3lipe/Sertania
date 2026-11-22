@@ -23,6 +23,7 @@ export function Admin() {
   return (
     <>
       <h1>Administração</h1>
+      {pode('admin.usuarios') && <PrimeirosPassos irPara={setAba} />}
       <Abas abas={abas} atual={aba} aoMudar={setAba} />
       {aba === 'usuarios' && <Usuarios />}
       {aba === 'catalogo' && <CatalogoAdmin />}
@@ -33,6 +34,43 @@ export function Admin() {
       {aba === 'integracao' && <Integracao />}
       {aba === 'privacidade' && <Privacidade />}
     </>
+  );
+}
+
+/** Roteiro de implantacao: some sozinho quando tudo estiver feito (ou quando a pessoa fechar). */
+function PrimeirosPassos({ irPara }: { irPara: (a: Aba) => void }) {
+  const { catalogo } = useEstado();
+  const usuarios = useDados<Usuario[]>('/admin/usuarios');
+  const diag = useDados<RegDiag[]>('/admin/diagnostico');
+  const [fechado, setFechado] = useState(() => {
+    try { return localStorage.getItem('primeiros-passos-fechado') === '1'; } catch { return false; }
+  });
+  if (fechado || !catalogo || !usuarios.dados || !diag.dados) return null;
+  const passos: Array<{ feito: boolean; titulo: string; texto: string; aba: Aba }> = [
+    { feito: catalogo.secretarias.length > 1, titulo: 'Cadastre as secretarias e setores', texto: 'Cada secretaria participante e seus setores (ex.: Infraestrutura → Iluminação Pública).', aba: 'catalogo' },
+    { feito: catalogo.servicos.length > 1, titulo: 'Cadastre os serviços com prazo', texto: 'O que o cidadão pode pedir, em linguagem simples, com setor responsável, prazo em dias úteis e palavras-chave para a IA.', aba: 'catalogo' },
+    { feito: catalogo.localidades.some((l) => l.tipo === 'COMUNIDADE_RURAL'), titulo: 'Confira localidades e feriados', texto: 'Ajuste as coordenadas da sede e dos distritos, inclua as comunidades rurais e os feriados municipais.', aba: 'localidades' },
+    { feito: usuarios.dados.length > 1, titulo: 'Cadastre os servidores', texto: 'Atendentes, equipes de campo e gestores. Cada um recebe uma senha provisória e cria a sua no primeiro acesso.', aba: 'usuarios' },
+    { feito: diag.dados.length > 0, titulo: 'Registre a linha de base', texto: 'Volume atual, tempos e canais levantados no diagnóstico, com fonte. Isso permite medir a melhoria.', aba: 'diagnostico' },
+  ];
+  const feitos = passos.filter((p) => p.feito).length;
+  return (
+    <div className="cartao" style={{ marginBottom: 16, borderColor: 'var(--primaria)' }}>
+      <div className="linha entre">
+        <h2 style={{ margin: 0 }}>Primeiros passos da implantação <span className="etq">{feitos} de {passos.length}</span></h2>
+        <button className="botao sec peq" onClick={() => { setFechado(true); try { localStorage.setItem('primeiros-passos-fechado', '1'); } catch { /* ignora */ } }}>Ocultar</button>
+      </div>
+      <ol className="coluna" style={{ paddingLeft: 20, marginTop: 12 }}>
+        {passos.map((p) => (
+          <li key={p.titulo}>
+            <strong style={{ textDecoration: p.feito ? 'line-through' : undefined }}>{p.feito ? '✓ ' : ''}{p.titulo}</strong>
+            {!p.feito && <> — <button className="botao sec peq" onClick={() => irPara(p.aba)}>fazer agora</button></>}
+            <div className="pequeno sec">{p.texto}</div>
+          </li>
+        ))}
+        <li><strong>Faça um teste ponta a ponta</strong><div className="pequeno sec">Registre uma solicitação como cidadão em <a href="#/nova">Registrar</a>, encaminhe na <a href="#/gestao/fila">Fila</a>, conclua com a equipe e avalie pelo protocolo. Depois, divulgue o endereço do sistema.</div></li>
+      </ol>
+    </div>
   );
 }
 

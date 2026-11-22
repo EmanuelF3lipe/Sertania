@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import multer from 'multer';
 import { Banco } from './db.js';
 import { lerConfig, type Config } from './config.js';
@@ -14,17 +15,19 @@ import { rotasAdmin, rotasIntegracao } from './rotas/admin.js';
 import { openapi } from './openapi.js';
 import { semear } from './seed.js';
 import { marcarRecorrencia, recalcularAlertas } from './ia/servico.js';
+import { prepararPrimeiroAcesso, rotasConfiguracao } from './rotas/configuracao.js';
 
-export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string; semDemonstracao?: boolean } = {}) {
-  const { arquivoBanco, semDemonstracao, ...cfg } = sobrescrever;
+export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string } = {}) {
+  const { arquivoBanco, ...cfg } = sobrescrever;
   const config = lerConfig(cfg);
   const banco = new Banco(arquivoBanco ?? path.join(config.pastaDados, 'sertania.db'));
   const ctx: Ctx = { banco, config };
   if (!banco.get('SELECT id FROM secretarias LIMIT 1')) {
-    semear(banco, { demonstracao: semDemonstracao !== true });
+    semear(banco, { modo: config.modoInicial });
     for (const { id } of banco.all<{ id: number }>('SELECT id FROM demandas ORDER BY criada_em')) marcarRecorrencia(banco, id);
     recalcularAlertas(banco);
   }
+  const codigoPrimeiroAcesso = prepararPrimeiroAcesso(ctx);
 
   const app = express();
   app.disable('x-powered-by');
@@ -49,6 +52,7 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
   app.get('/api/openapi.json', (_req, res) => {
     res.json(openapi);
   });
+  app.use('/api/configuracao', rotasConfiguracao(ctx));
   app.use('/api/publico', rotasPublicas(ctx));
   app.use('/api/auth', rotasAuth(ctx));
   app.use('/api/cidadao', rotasCidadao(ctx));
@@ -58,8 +62,10 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
   app.use('/api', (_req, _res, next) => next(new ErroHttp(404, 'Rota não encontrada', 'nao_encontrado')));
 
   // Interface web compilada (producao). Em desenvolvimento o Vite serve a interface.
-  const web = path.resolve('dist/web');
-  if (fs.existsSync(web)) {
+  // Procura a interface compilada a partir deste arquivo, para funcionar de qualquer pasta.
+  const aqui = path.dirname(fileURLToPath(import.meta.url));
+  const web = [path.resolve(aqui, '../../web'), path.resolve(aqui, '../../dist/web'), path.resolve('dist/web')].find((p) => fs.existsSync(path.join(p, 'index.html')));
+  if (web) {
     app.use(express.static(web, { index: false, maxAge: '1h' }));
     app.get(/^(?!\/api).*/, (_req, res) => res.sendFile(path.join(web, 'index.html')));
   }
@@ -83,5 +89,5 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
     res.status(500).json({ erro: 'Erro interno. Tente novamente em instantes.', codigo: 'interno' });
   });
 
-  return { app, ctx };
+  return { app, ctx, codigoPrimeiroAcesso };
 }

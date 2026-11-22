@@ -68,15 +68,16 @@ export function tokenDaRequisicao(req: Request): string | undefined {
 
 interface LinhaUsuario {
   id: number; nome: string; email: string; papel: Papel; secretaria_id: number | null;
-  setor_id: number | null; ativo: number; csrf: string; expira_em: string;
+  setor_id: number | null; ativo: number; csrf: string; expira_em: string; deve_trocar_senha: number;
 }
 
 export function paraSessao(u: {
-  id: number; nome: string; email: string; papel: Papel; secretaria_id: number | null; setor_id: number | null;
+  id: number; nome: string; email: string; papel: Papel; secretaria_id: number | null; setor_id: number | null; deve_trocar_senha?: number;
 }): UsuarioSessao {
   return {
     id: u.id, nome: u.nome, email: u.email, papel: u.papel,
     secretariaId: u.secretaria_id, setorId: u.setor_id, permissoes: [...PERMISSOES[u.papel]],
+    deveTrocarSenha: u.deve_trocar_senha === 1,
   };
 }
 
@@ -98,6 +99,11 @@ export function middlewareSessao(banco: Banco) {
     const isento = ['/api/auth/entrar', '/api/auth/cadastro', '/api/auth/sair', '/api/integracao/'].some((p) => req.path.startsWith(p));
     if (mutacao && req.usuario && !isento && req.headers['x-csrf'] !== req.csrf) {
       next(new ErroHttp(403, 'Sessão expirada ou requisição inválida. Recarregue a página.', 'csrf'));
+      return;
+    }
+    // Senha provisoria: so permite trocar a senha, sair e usar as paginas publicas.
+    if (req.usuario?.deveTrocarSenha && !req.path.startsWith('/api/auth/') && !req.path.startsWith('/api/publico/')) {
+      next(new ErroHttp(403, 'Troque sua senha provisória para continuar.', 'trocar_senha'));
       return;
     }
     next();

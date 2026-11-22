@@ -25,7 +25,11 @@ export const ir = (caminho: string) => {
 };
 
 // ------------------------------------------------------------------ sessao e catalogo
+export interface Instalacao { precisaPrimeiroAcesso: boolean; demonstracao: boolean; ia: string }
+
 interface Estado {
+  instalacao: Instalacao | null;
+  recarregarInstalacao: () => void;
   usuario: UsuarioSessao | null;
   carregando: boolean;
   catalogo: Catalogo | null;
@@ -56,11 +60,17 @@ export function ProvedorEstado({ children }: { children: ReactNode }) {
   }, []);
   const recarregarRef = useRef(recarregarCatalogo);
   recarregarRef.current = recarregarCatalogo;
+  const [instalacao, setInstalacao] = useState<Instalacao | null>(null);
+  const recarregarInstalacao = useCallback(() => {
+    get<Instalacao>('/configuracao/estado').then(setInstalacao).catch(() => undefined);
+  }, []);
   useEffect(() => {
     lerSessao().then(setUsuario).catch(() => setUsuario(null)).finally(() => setCarregando(false));
     recarregarCatalogo();
-  }, [recarregarCatalogo]);
+    recarregarInstalacao();
+  }, [recarregarCatalogo, recarregarInstalacao]);
   const valor: Estado = {
+    instalacao, recarregarInstalacao,
     usuario, carregando, catalogo, recarregarCatalogo,
     definirUsuario: (u, csrf) => {
       definirCsrf(csrf);

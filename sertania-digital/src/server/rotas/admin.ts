@@ -73,7 +73,7 @@ export function rotasAdmin(ctx: Ctx): Router {
     if (erro) throw invalido(erro);
     if (b.get('SELECT id FROM usuarios WHERE email = ?', d.email.toLowerCase())) throw conflito('E-mail já cadastrado');
     const { id } = b.run(
-      'INSERT INTO usuarios (nome, email, telefone, senha_hash, papel, secretaria_id, setor_id, ativo) VALUES (?,?,?,?,?,?,?,?)',
+      'INSERT INTO usuarios (nome, email, telefone, senha_hash, papel, secretaria_id, setor_id, ativo, deve_trocar_senha) VALUES (?,?,?,?,?,?,?,?,1)',
       d.nome, d.email.toLowerCase(), d.telefone ?? null, hashSenha(senha), d.papel, d.secretariaId, d.setorId, d.ativo,
     );
     auditar(b, ator(req), 'USUARIO_CRIADO', 'usuario', id, { papel: d.papel, secretariaId: d.secretariaId, setorId: d.setorId });
@@ -93,7 +93,8 @@ export function rotasAdmin(ctx: Ctx): Router {
     if (d.senha) {
       const erro = validarForcaSenha(d.senha);
       if (erro) throw invalido(erro);
-      b.run('UPDATE usuarios SET senha_hash = ? WHERE id = ?', hashSenha(d.senha), id);
+      b.run('UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 1 WHERE id = ?', hashSenha(d.senha), id);
+      b.run('DELETE FROM sessoes WHERE usuario_id = ?', id);
     }
     if (!d.ativo || atual.papel !== d.papel) b.run('DELETE FROM sessoes WHERE usuario_id = ?', id);
     auditar(b, ator(req), 'USUARIO_ALTERADO', 'usuario', id, { papelAnterior: atual.papel, papel: d.papel, ativo: d.ativo, senhaRedefinida: Boolean(d.senha) });

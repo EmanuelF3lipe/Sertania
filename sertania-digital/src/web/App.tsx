@@ -3,7 +3,9 @@ import { PAPEL_TEXTO } from '../shared/dominio';
 import { useDados, useEstado, useOnline, usePreferencias, useRota } from './nucleo';
 import { sincronizar } from './offline';
 import { Aviso, Carregando } from './componentes/comuns';
-import { Acompanhar, Entrar, Inicio, MinhasDemandas, Transparencia } from './telas/publico';
+import { Acompanhar, Entrar, MinhasDemandas, Transparencia } from './telas/publico';
+import { Inicio } from './telas/inicio';
+import { PrimeiroAcesso, TrocarSenha } from './telas/acesso';
 import { NovaDemanda } from './telas/nova-demanda';
 import { DetalheDemanda, Fila } from './telas/gestao';
 import { IaAlertas, MapaTela, Painel, Relatorios } from './telas/paineis';
@@ -89,7 +91,7 @@ function ApiDocs() {
 
 export function App() {
   const { partes } = useRota();
-  const { pode } = useEstado();
+  const { pode, usuario, instalacao } = useEstado();
   const online = useOnline();
   const [sincronizadas, setSincronizadas] = useState(0);
 
@@ -100,7 +102,9 @@ export function App() {
 
   const [a, b] = partes;
   let tela: ReactNode;
-  if (!a) tela = <Inicio />;
+  if (instalacao?.precisaPrimeiroAcesso) tela = <PrimeiroAcesso />;
+  else if (usuario?.deveTrocarSenha) tela = <TrocarSenha />;
+  else if (!a) tela = <Inicio />;
   else if (a === 'nova') tela = <NovaDemanda />;
   else if (a === 'acompanhar') tela = <Acompanhar />;
   else if (a === 'transparencia') tela = <Transparencia />;

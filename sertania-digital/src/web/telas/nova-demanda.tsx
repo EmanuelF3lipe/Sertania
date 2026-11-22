@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CANAIS, CANAL_TEXTO, type Canal, type SugestaoClassificacao } from '../../shared/dominio';
 import { comprimirImagem, enviarFormulario, post, ErroApi } from '../api';
-import { ir, useEstado, useOnline } from '../nucleo';
+import { ir, useEstado, useOnline, useRota } from '../nucleo';
 import { Aviso, Copiar } from '../componentes/comuns';
 import { Mapa } from '../componentes/mapa';
 import { guardar } from '../offline';
@@ -11,11 +11,12 @@ interface Comprovante { protocolo: string; codigo: string; offline?: boolean }
 /** Formulario em passos curtos, linguagem simples, usavel no celular e em atendimento assistido. */
 export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
   const { catalogo, usuario } = useEstado();
+  const { query } = useRota();
   const online = useOnline();
   const [passo, setPasso] = useState(1);
   const [descricao, setDescricao] = useState('');
   const [sugestoes, setSugestoes] = useState<SugestaoClassificacao[]>([]);
-  const [servicoId, setServicoId] = useState<number | null>(null);
+  const [servicoId, setServicoId] = useState<number | null>(() => (query.get('servico') ? Number(query.get('servico')) : null));
   const [secretariaFiltro, setSecretariaFiltro] = useState<number | null>(null);
   const [localidadeId, setLocalidadeId] = useState<number | null>(null);
   const [ponto, setPonto] = useState<{ lat: number; lng: number } | null>(null);

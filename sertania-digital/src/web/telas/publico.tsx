@@ -4,45 +4,14 @@ import { enviarFormulario, fmtData, fmtHoras, fmtNum, get, post } from '../api';
 import { ir, useDados, useEstado, useRota } from '../nucleo';
 import { Aviso, Carregando, EtqStatus, LinhaDoTempo, ListaAnexos, Sla } from '../componentes/comuns';
 import { BarrasH, Kpi } from '../componentes/graficos';
-import { enviadas, pendentes, type Enviada } from '../offline';
-
-export function Inicio() {
-  const { usuario, pode } = useEstado();
-  const [locais, setLocais] = useState<{ pend: number; env: Enviada[] }>({ pend: 0, env: [] });
-  useEffect(() => {
-    Promise.all([pendentes(), enviadas()]).then(([p, e]) => setLocais({ pend: p.length, env: e.slice(-3).reverse() })).catch(() => undefined);
-  }, []);
-  return (
-    <div className="estreito">
-      <h1>Olá! Como a prefeitura pode ajudar?</h1>
-      <p className="sec">Registre problemas na sua rua, distrito ou comunidade e acompanhe cada passo do atendimento.</p>
-      <div className="coluna" style={{ margin: '20px 0' }}>
-        <a className="botao grande" href="#/nova">📝<span>Registrar uma solicitação<small>Iluminação, buracos, lixo, água, saúde, escola e outros</small></span></a>
-        <a className="botao grande sec" href="#/acompanhar">🔎<span>Acompanhar minha solicitação<small>Use o protocolo e o código de acesso</small></span></a>
-        <a className="botao grande sec" href="#/transparencia">📊<span>Transparência<small>Números do atendimento e dados abertos</small></span></a>
-        {!usuario && <a className="botao grande sec" href="#/entrar">👤<span>Entrar ou criar conta<small>Para ver todas as suas solicitações em um só lugar (opcional)</small></span></a>}
-        {usuario?.papel === 'CIDADAO' && <a className="botao grande sec" href="#/minhas">📂<span>Minhas solicitações</span></a>}
-        {pode('demanda.ver') && <a className="botao grande sec" href="#/gestao/fila">🏛<span>Área da equipe<small>Fila de atendimento, painéis e mapa</small></span></a>}
-      </div>
-      {locais.pend > 0 && <Aviso tipo="alerta">{locais.pend} solicitação(ões) aguardando internet para envio neste aparelho.</Aviso>}
-      {locais.env.length > 0 && (
-        <div className="cartao">
-          <h3>Enviadas deste aparelho quando o sinal voltou</h3>
-          {locais.env.map((e) => <p key={e.chave} className="pequeno">Protocolo <strong>{e.protocolo}</strong> · código <span className="codigo" style={{ fontSize: '1rem' }}>{e.codigo}</span></p>)}
-        </div>
-      )}
-      <div className="cartao" style={{ marginTop: 16 }}>
-        <h3>Precisa de ajuda para registrar?</h3>
-        <p className="sec">Procure o atendimento da Prefeitura, a ouvidoria ou o posto do seu distrito. Um servidor registra para você e entrega o protocolo.</p>
-      </div>
-    </div>
-  );
-}
 
 export function Acompanhar() {
   const { query } = useRota();
   const [protocolo, setProtocolo] = useState(query.get('protocolo') ?? '');
-  const [codigo, setCodigo] = useState('');
+  const { instalacao } = useEstado();
+  const [codigo, setCodigo] = useState(() => {
+    try { const c = sessionStorage.getItem('codigo-acesso') ?? ''; sessionStorage.removeItem('codigo-acesso'); return c; } catch { return ''; }
+  });
   const [d, setD] = useState<DemandaDetalhe | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [resposta, setResposta] = useState('');
@@ -62,6 +31,11 @@ export function Acompanhar() {
     }
   };
 
+  useEffect(() => {
+    if (protocolo && codigo) void buscar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="estreito">
       <h1>Acompanhar solicitação</h1>
@@ -71,7 +45,7 @@ export function Acompanhar() {
           <div className="campo"><label htmlFor="c">Código de acesso</label><input id="c" value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} placeholder="6 letras/números" autoComplete="off" /></div>
         </div>
         <button className="botao">Consultar</button>
-        <p className="ajuda">Demonstração: protocolo <strong>SER-2026-000001</strong> e código <strong>DEMO01</strong>.</p>
+        {instalacao?.demonstracao && <p className="ajuda">Demonstração: protocolo <strong>SER-2026-000001</strong> e código <strong>DEMO01</strong>.</p>}
       </form>
       {erro && <Aviso tipo="erro">{erro}</Aviso>}
       {d && (
@@ -154,7 +128,7 @@ export function Transparencia() {
 }
 
 export function Entrar() {
-  const { definirUsuario } = useEstado();
+  const { definirUsuario, instalacao } = useEstado();
   const [modo, setModo] = useState<'entrar' | 'cadastro'>('entrar');
   const [f, setF] = useState({ nome: '', email: '', telefone: '', senha: '', consentimento: false });
   const [erro, setErro] = useState<string | null>(null);
@@ -163,7 +137,7 @@ export function Entrar() {
     try {
       const r = await post<{ csrf: string; usuario: UsuarioSessao }>(modo === 'entrar' ? '/auth/entrar' : '/auth/cadastro', modo === 'entrar' ? { email: f.email, senha: f.senha } : f);
       definirUsuario(r.usuario, r.csrf);
-      ir(r.usuario.papel === 'CIDADAO' ? '/minhas' : '/gestao/fila');
+      ir(r.usuario.deveTrocarSenha ? '/trocar-senha' : r.usuario.papel === 'CIDADAO' ? '/minhas' : '/gestao/fila');
     } catch (e) {
       setErro((e as Error).message);
     }
@@ -183,7 +157,7 @@ export function Entrar() {
           <button type="button" className="botao sec peq" onClick={() => setModo(modo === 'entrar' ? 'cadastro' : 'entrar')}>{modo === 'entrar' ? 'Não tenho conta: criar' : 'Já tenho conta: entrar'}</button>
         </p>
       </form>
-      <details className="cartao" style={{ marginTop: 16 }}>
+      {instalacao?.demonstracao && <details className="cartao" style={{ marginTop: 16 }}>
         <summary><strong>Contas de demonstração</strong> (senha <code>Sertania2026</code>)</summary>
         <ul className="pequeno">
           {[
@@ -199,7 +173,8 @@ export function Entrar() {
             <li key={e}><button type="button" className="botao sec peq" onClick={() => { setModo('entrar'); setF({ ...f, email: e!, senha: 'Sertania2026' }); }}>{e}</button> {d}</li>
           ))}
         </ul>
-      </details>
+      </details>}
+      <p className="ajuda" style={{ marginTop: 12 }}>Servidores: a conta é criada pela administração, que entrega uma senha provisória. No primeiro acesso você cria a sua própria senha.</p>
     </div>
   );
 }

@@ -74,6 +74,23 @@ export function rotasAuth(ctx: Ctx): Router {
     res.json({ ok: true });
   });
 
+  r.post('/trocar-senha', (req, res) => {
+    const u = exigirLogin(req);
+    const d = validar(z.object({ atual: z.string().max(200), nova: z.string().max(200) }), req.body);
+    const linha = ctx.banco.get<{ senha_hash: string }>('SELECT senha_hash FROM usuarios WHERE id = ?', u.id)!;
+    if (!conferirSenha(d.atual, linha.senha_hash)) throw new ErroHttp(400, 'A senha atual não confere', 'credenciais');
+    const erro = validarForcaSenha(d.nova);
+    if (erro) throw invalido(erro);
+    if (d.nova === d.atual) throw invalido('A nova senha precisa ser diferente da atual');
+    ctx.banco.run('UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 0 WHERE id = ?', hashSenha(d.nova), u.id);
+    // Encerra as outras sessoes e rotaciona a atual.
+    ctx.banco.run('DELETE FROM sessoes WHERE usuario_id = ?', u.id);
+    const s = criarSessao(ctx.banco, u.id);
+    definirCookie(res, s.token, ctx.config.producao);
+    auditar(ctx.banco, ator(req), 'SENHA_TROCADA', 'usuario', u.id);
+    res.json({ csrf: s.csrf, usuario: { ...u, deveTrocarSenha: false } });
+  });
+
   r.get('/eu', (req, res) => {
     res.json(req.usuario ? { usuario: req.usuario, csrf: req.csrf } : { usuario: null });
   });

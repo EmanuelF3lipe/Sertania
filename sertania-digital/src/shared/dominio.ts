@@ -360,6 +360,8 @@ export interface UsuarioSessao {
   secretariaId: number | null;
   setorId: number | null;
   permissoes: Permissao[];
+  /** Senha provisoria: precisa ser trocada antes de qualquer outra acao. */
+  deveTrocarSenha: boolean;
 }
 
 export interface SugestaoClassificacao {

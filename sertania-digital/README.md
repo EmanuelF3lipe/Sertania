@@ -40,12 +40,35 @@ npm start
 
 Esse modo serve a API e a interface na porta 3000. Os outros comandos são:
 
-- `npm test`: 18 testes, entre unitários e de ponta a ponta pela API HTTP.
+- `npm test`: 19 testes, entre unitários e de ponta a ponta pela API HTTP.
 - `npm run typecheck`: verificação de tipos.
-- `npm run backup`: backup manual do banco.
-- `npm run seed -- --recriar`: recria o banco de demonstração.
+- `npm run backup`: backup manual do banco (`npm run backup:prod` no build de produção).
+- `npm run iniciar -- --demonstracao --recriar`: apaga e recria o banco de demonstração.
 
 A configuração fica em `.env` (veja `.env.example`). Para usar o Claude na triagem e na redação de relatórios, defina `IA_PROVEDOR=claude` e `ANTHROPIC_API_KEY`. Sem isso, toda a IA roda localmente e nenhum dado sai do servidor.
+
+## Implantação na prefeitura (banco limpo)
+
+1. **Servidor.** Qualquer máquina ou VPS com Node 22.13 ou mais novo, atrás de HTTPS. Use um proxy como Caddy ou Nginx e defina `NODE_ENV=production`, para o cookie de sessão ser enviado só por HTTPS.
+2. **Instalar e criar o banco vazio.**
+   ```powershell
+   npm install
+   npm run build
+   npm run iniciar -- --limpo
+   ```
+   O banco nasce só com o mínimo: a SAD com o setor “Protocolo Geral”, o serviço “Outro assunto / não sei o setor”, a sede e os distritos (coordenadas aproximadas) e os feriados nacionais e de PE. Com `--modelo`, ele já vem com um catálogo modelo de 7 secretarias e 15 serviços para ajustar, ainda sem pessoas nem demandas.
+3. **Subir o sistema** com `npm start`. Como ainda não existe administrador, o terminal mostra um **código de instalação**, por exemplo `HTVCVMZK77`.
+4. **Primeiro acesso.** Abra o endereço no navegador: a única tela disponível pede o código, o nome, o e-mail e a senha de quem vai administrar. Sem o código, que só aparece para quem tem acesso ao servidor, ninguém consegue se tornar administrador. Depois de usado, ele deixa de valer.
+5. **Primeiros passos.** A tela de Administração mostra um roteiro com o andamento:
+   1. secretarias e setores;
+   2. serviços com prazo e palavras-chave;
+   3. localidades (incluir as comunidades rurais) e feriados municipais;
+   4. servidores;
+   5. linha de base do diagnóstico.
+6. **Servidores.** O administrador cadastra cada servidor com perfil e lotação, e o sistema gera uma **senha provisória**. No primeiro login, a pessoa é obrigada a criar a própria senha antes de ver qualquer dado.
+7. **Teste ponta a ponta e divulgação.** Registre uma solicitação de teste, percorra o fluxo até a avaliação e então divulgue o endereço. O cidadão **não precisa de conta**: basta o protocolo e o código de acesso.
+
+Rotina: backup automático diário em `dados/backups` (copie a pasta para fora do servidor). Para gerar um na hora, use `npm run backup:prod`. Os parâmetros também podem ir na linha de comando: `node dist/server/server/index.js --porta=8080 --dados=D:/sertania --modo-inicial=limpo`.
 
 ## Análise do repositório original
 

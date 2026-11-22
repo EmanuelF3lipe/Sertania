@@ -134,6 +134,14 @@ export class Banco {
     this.db = new DatabaseSync(arquivo);
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
     this.db.exec(ESQUEMA);
+    this.migrar();
+  }
+
+  /** Migracoes aditivas para bancos criados por versoes anteriores. */
+  private migrar(): void {
+    const colunas = (t: string) => (this.db.prepare(`PRAGMA table_info(${t})`).all() as Array<{ name: string }>).map((c) => c.name);
+    if (!colunas('usuarios').includes('deve_trocar_senha'))
+      this.db.exec('ALTER TABLE usuarios ADD COLUMN deve_trocar_senha INTEGER NOT NULL DEFAULT 0');
   }
 
   private conv(params: Param[]): SQLInputValue[] {
