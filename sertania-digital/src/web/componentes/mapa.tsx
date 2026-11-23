@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useEstado } from '../nucleo';
+
+/** Padrao: OpenStreetMap sem subdominios. A prefeitura pode apontar outro servidor em MAPA_TILES. */
+const TILES_PADRAO = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 export const CENTRO_SERTANIA: [number, number] = [-8.0733, -37.2646];
 
@@ -30,6 +34,9 @@ export function Mapa({ pontos = [], circulos = [], selecao, aoSelecionar, baixo,
   zoom?: number;
   centro?: [number, number];
 }) {
+  const { instalacao } = useEstado();
+  const fonte = useRef(instalacao?.mapa);
+  fonte.current = instalacao?.mapa;
   const div = useRef<HTMLDivElement>(null);
   const mapa = useRef<L.Map | null>(null);
   const camada = useRef<L.LayerGroup | null>(null);
@@ -40,7 +47,13 @@ export function Mapa({ pontos = [], circulos = [], selecao, aoSelecionar, baixo,
   useEffect(() => {
     if (!div.current || mapa.current) return;
     const m = L.map(div.current, { center: centro ?? CENTRO_SERTANIA, zoom, scrollWheelZoom: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m);
+    // A politica da OSM exige identificar o site de origem (Referer): enviamos so a origem, nunca o caminho.
+    L.tileLayer(fonte.current?.tiles ?? TILES_PADRAO, {
+      maxZoom: 19,
+      attribution: fonte.current?.atribuicao ?? '© colaboradores do OpenStreetMap',
+      referrerPolicy: 'strict-origin-when-cross-origin',
+      crossOrigin: false,
+    }).addTo(m);
     camada.current = L.layerGroup().addTo(m);
     m.on('click', (e: L.LeafletMouseEvent) => cb.current?.({ lat: e.latlng.lat, lng: e.latlng.lng }));
     mapa.current = m;

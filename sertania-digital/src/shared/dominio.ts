@@ -242,6 +242,39 @@ export const PERMISSOES: Record<Papel, readonly Permissao[]> = {
   AUDITOR: ['demanda.ver', 'painel.ver', 'auditoria.ver'],
 };
 
+/** Descricao das permissoes para a tela de perfis, agrupadas por modulo. */
+export const PERMISSAO_INFO: Record<Permissao, { grupo: string; nome: string; descricao: string; sensivel?: boolean }> = {
+  'demanda.ver': { grupo: 'Atendimento', nome: 'Ver a fila de solicitações', descricao: 'Acessa a fila, o detalhe e o mapa das solicitações do seu escopo.' },
+  'demanda.registrar_assistido': { grupo: 'Atendimento', nome: 'Registrar atendimento assistido', descricao: 'Registra pedidos recebidos no balcão, por telefone, WhatsApp ou ouvidoria.' },
+  'demanda.triagem': { grupo: 'Atendimento', nome: 'Triar e encaminhar', descricao: 'Classifica, encaminha para outro setor, pede informação, cancela e reabre.' },
+  'demanda.executar': { grupo: 'Atendimento', nome: 'Executar e concluir', descricao: 'Agenda, inicia a execução, registra impedimentos e evidências e conclui.' },
+  'demanda.atribuir': { grupo: 'Atendimento', nome: 'Definir responsável', descricao: 'Escolhe a pessoa do setor responsável por cada solicitação.' },
+  'demanda.ver_dados_pessoais': { grupo: 'Atendimento', nome: 'Ver dados pessoais do cidadão', descricao: 'Mostra nome, telefone e e-mail completos. Cada visualização fica registrada na auditoria.', sensivel: true },
+  'painel.ver': { grupo: 'Gestão', nome: 'Painel de indicadores', descricao: 'Indicadores, gráficos e exportação gerencial (sem dados pessoais).' },
+  'relatorio.gerar': { grupo: 'Gestão', nome: 'Relatórios', descricao: 'Gera, revisa e publica relatórios por período, setor e localidade.' },
+  'alerta.tratar': { grupo: 'Gestão', nome: 'Tratar alertas', descricao: 'Marca alertas de prazo, recorrência e pico como tratados.' },
+  'ia.usar': { grupo: 'Inteligência artificial', nome: 'Ver sugestões da IA', descricao: 'Mostra classificação, prioridade, resumo e recorrências sugeridas.' },
+  'ia.decidir': { grupo: 'Inteligência artificial', nome: 'Aceitar ou rejeitar a IA', descricao: 'Decide sobre as sugestões. A decisão humana fica registrada.' },
+  'admin.usuarios': { grupo: 'Configurações', nome: 'Equipe e perfis', descricao: 'Cadastra servidores, gera senhas provisórias e ajusta as permissões dos perfis.', sensivel: true },
+  'admin.catalogo': { grupo: 'Configurações', nome: 'Secretarias, serviços e localidades', descricao: 'Mantém o catálogo de serviços, prazos, localidades e feriados.' },
+  'admin.diagnostico': { grupo: 'Configurações', nome: 'Diagnóstico (linha de base)', descricao: 'Registra e valida os dados reais do levantamento inicial.' },
+  'admin.backup': { grupo: 'Configurações', nome: 'Backup e exportação completa', descricao: 'Gera backups e baixa todos os dados em JSON.', sensivel: true },
+  'admin.integracao': { grupo: 'Configurações', nome: 'Integrações (API)', descricao: 'Cria e revoga tokens de acesso para outros sistemas.', sensivel: true },
+  'admin.privacidade': { grupo: 'Configurações', nome: 'Privacidade (LGPD)', descricao: 'Aplica a política de retenção e anonimização.' },
+  'auditoria.ver': { grupo: 'Controle', nome: 'Auditoria', descricao: 'Consulta o registro encadeado de todas as ações do sistema.' },
+};
+export const TODAS_PERMISSOES = Object.keys(PERMISSAO_INFO) as Permissao[];
+
+/** Permissoes que o perfil de administracao nunca perde (evita trancar o sistema). */
+export const PERMISSOES_FIXAS: Partial<Record<Papel, Permissao[]>> = { ADMIN_SAD: ['admin.usuarios'] };
+
+export const ESCOPO_TEXTO: Record<string, string> = {
+  PROPRIO: 'Só as próprias solicitações',
+  SETOR: 'Solicitações do seu setor',
+  SECRETARIA: 'Solicitações da sua secretaria',
+  MUNICIPIO: 'Todo o município',
+};
+
 export function tem(papel: Papel, permissao: Permissao): boolean {
   return PERMISSOES[papel].includes(permissao);
 }

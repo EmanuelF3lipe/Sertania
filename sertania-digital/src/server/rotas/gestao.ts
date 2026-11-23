@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { COMANDOS, PRIORIDADES, RESULTADOS, STATUS_TEXTO, tem, type AnaliseIa, type Comando } from '../../shared/dominio.js';
+import { COMANDOS, PRIORIDADES, RESULTADOS, STATUS_TEXTO, type AnaliseIa, type Comando } from '../../shared/dominio.js';
 import { ator, idParam, validar, textoOpc, type Ctx } from '../contexto.js';
 import { exigir, exigirLogin } from '../auth.js';
 import { abrirDemanda, anotar, carregar, executarComando, noEscopo, paraDetalhe, paraResumo, SELECT_DEMANDA, type LinhaDemanda } from '../demandas.js';
@@ -32,6 +32,23 @@ export function rotasGestao(ctx: Ctx): Router {
   };
 
   // ------------------------------------------------------------- fila
+  // Contagens rapidas do escopo do usuario, para a tela inicial da equipe.
+  r.get('/resumo', (req, res) => {
+    const u = exigir(req, 'demanda.ver');
+    const w = whereFiltros(u, lerFiltros({}));
+    const aberta = "d.status NOT IN ('CONCLUIDA','CANCELADA')";
+    const contar = (extra: string) => b.get<{ n: number }>(`SELECT COUNT(*) AS n FROM demandas d WHERE ${w.sql} AND ${extra}`, ...w.params)!.n;
+    res.json({
+      abertas: contar(aberta),
+      triagem: contar("d.status = 'RECEBIDA'"),
+      minhas: contar(`${aberta} AND d.responsavel_id = ${u.id}`),
+      semResponsavel: contar(`${aberta} AND d.responsavel_id IS NULL`),
+      vencidas: contar(`${aberta} AND d.pausada_desde IS NULL AND d.prazo_em < '${new Date().toISOString()}'`),
+      urgentes: contar(`${aberta} AND d.prioridade IN ('ALTA','URGENTE')`),
+      concluidas7d: contar(`d.status = 'CONCLUIDA' AND d.concluida_em >= '${new Date(Date.now() - 7 * 86400_000).toISOString()}'`),
+    });
+  });
+
   r.get('/demandas', (req, res) => {
     const u = exigir(req, 'demanda.ver');
     const f = lerFiltros(req.query as Record<string, unknown>);
@@ -60,7 +77,7 @@ export function rotasGestao(ctx: Ctx): Router {
   r.get('/demandas/:id', (req, res) => {
     const d = carregarNoEscopo(req);
     const u = req.usuario!;
-    if (tem(u.papel, 'demanda.ver_dados_pessoais')) auditar(b, ator(req), 'DADOS_PESSOAIS_VISUALIZADOS', 'demanda', d.id);
+    if (u.permissoes.includes('demanda.ver_dados_pessoais')) auditar(b, ator(req), 'DADOS_PESSOAIS_VISUALIZADOS', 'demanda', d.id);
     const sugestao = b.get<{ id: number; conteudo: string; status: string; provedor: string; criado_em: string }>(
       "SELECT * FROM sugestoes_ia WHERE demanda_id = ? AND status <> 'SUBSTITUIDA' ORDER BY id DESC LIMIT 1", d.id,
     );
@@ -150,7 +167,7 @@ export function rotasGestao(ctx: Ctx): Router {
     const a = b.get<{ demanda_id: number; caminho: string; mime: string; nome: string; origem: string }>('SELECT * FROM anexos WHERE id = ?', idParam(req));
     if (!a) throw naoEncontrado();
     const d = carregar(b, a.demanda_id);
-    const permitido = u.papel === 'CIDADAO' ? d.solicitante_id === u.id && a.origem !== 'INTERNO' : tem(u.papel, 'demanda.ver') && noEscopo(u, d);
+    const permitido = u.papel === 'CIDADAO' ? d.solicitante_id === u.id && a.origem !== 'INTERNO' : u.permissoes.includes('demanda.ver') && noEscopo(u, d);
     if (!permitido) throw proibido();
     const arquivo = path.resolve(ctx.config.pastaDados, a.caminho);
     if (!arquivo.startsWith(path.resolve(ctx.config.pastaDados)) || !fs.existsSync(arquivo)) throw naoEncontrado('Arquivo indisponível');

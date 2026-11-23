@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import type { Banco } from './db.js';
-import { PERMISSOES, type Papel, type Permissao, type UsuarioSessao } from '../shared/dominio.js';
+import { PERMISSOES, PERMISSOES_FIXAS, TODAS_PERMISSOES, type Papel, type Permissao, type UsuarioSessao } from '../shared/dominio.js';
 import { naoAutenticado, proibido, ErroHttp } from './erros.js';
 
 export const COOKIE = 'sertania_sessao';
@@ -71,12 +71,22 @@ interface LinhaUsuario {
   setor_id: number | null; ativo: number; csrf: string; expira_em: string; deve_trocar_senha: number;
 }
 
+/** Permissoes do perfil: as ajustadas pela administracao ou, se nao houver, as padrao. */
+export function permissoesDoPapel(banco: Banco, papel: Papel): Permissao[] {
+  if (papel === 'CIDADAO') return [];
+  const linha = banco.get<{ permissoes: string }>('SELECT permissoes FROM perfis_permissoes WHERE papel = ?', papel);
+  if (!linha) return [...PERMISSOES[papel]];
+  const lista = (JSON.parse(linha.permissoes) as string[]).filter((p): p is Permissao => (TODAS_PERMISSOES as string[]).includes(p));
+  for (const fixa of PERMISSOES_FIXAS[papel] ?? []) if (!lista.includes(fixa)) lista.push(fixa);
+  return lista;
+}
+
 export function paraSessao(u: {
   id: number; nome: string; email: string; papel: Papel; secretaria_id: number | null; setor_id: number | null; deve_trocar_senha?: number;
-}): UsuarioSessao {
+}, banco?: Banco): UsuarioSessao {
   return {
     id: u.id, nome: u.nome, email: u.email, papel: u.papel,
-    secretariaId: u.secretaria_id, setorId: u.setor_id, permissoes: [...PERMISSOES[u.papel]],
+    secretariaId: u.secretaria_id, setorId: u.setor_id, permissoes: banco ? permissoesDoPapel(banco, u.papel) : [...PERMISSOES[u.papel]],
     deveTrocarSenha: u.deve_trocar_senha === 1,
   };
 }
@@ -91,7 +101,7 @@ export function middlewareSessao(banco: Banco) {
         sha256(token),
       );
       if (u && u.ativo === 1 && u.expira_em > new Date().toISOString()) {
-        req.usuario = paraSessao(u);
+        req.usuario = paraSessao(u, banco);
         req.csrf = u.csrf;
       }
     }

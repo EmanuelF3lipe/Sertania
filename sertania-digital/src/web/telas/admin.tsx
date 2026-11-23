@@ -1,44 +1,12 @@
 import { useState } from 'react';
-import { PAPEIS, PAPEL_TEXTO, PRIORIDADES, TIPOS_LOCALIDADE, type Catalogo, type Papel, type Prioridade, type TipoLocalidade } from '../../shared/dominio';
+import { PRIORIDADES, TIPOS_LOCALIDADE, type Catalogo, type Prioridade, type TipoLocalidade } from '../../shared/dominio';
 import { api, fmtData, post } from '../api';
-import { useDados, useEstado } from '../nucleo';
-import { Abas, Aviso, Carregando, Copiar } from '../componentes/comuns';
-
-type Aba = 'usuarios' | 'catalogo' | 'localidades' | 'diagnostico' | 'auditoria' | 'dados' | 'integracao' | 'privacidade';
-
-export function Admin() {
-  const { pode } = useEstado();
-  const abas = ([
-    ['usuarios', 'Servidores e perfis', 'admin.usuarios'],
-    ['catalogo', 'Serviços e prazos', 'admin.catalogo'],
-    ['localidades', 'Localidades e feriados', 'admin.catalogo'],
-    ['diagnostico', 'Diagnóstico (linha de base)', 'admin.diagnostico'],
-    ['auditoria', 'Auditoria', 'auditoria.ver'],
-    ['dados', 'Backup e exportação', 'admin.backup'],
-    ['integracao', 'Integrações (API)', 'admin.integracao'],
-    ['privacidade', 'Privacidade (LGPD)', 'admin.privacidade'],
-  ] as const).filter(([, , p]) => pode(p)).map(([a, r]) => [a, r] as [Aba, string]);
-  const [aba, setAba] = useState<Aba>(abas[0]?.[0] ?? 'auditoria');
-  if (!abas.length) return <Aviso tipo="erro">Sem permissão.</Aviso>;
-  return (
-    <>
-      <h1>Administração</h1>
-      {pode('admin.usuarios') && <PrimeirosPassos irPara={setAba} />}
-      <Abas abas={abas} atual={aba} aoMudar={setAba} />
-      {aba === 'usuarios' && <Usuarios />}
-      {aba === 'catalogo' && <CatalogoAdmin />}
-      {aba === 'localidades' && <Localidades />}
-      {aba === 'diagnostico' && <Diagnostico />}
-      {aba === 'auditoria' && <Auditoria />}
-      {aba === 'dados' && <Dados />}
-      {aba === 'integracao' && <Integracao />}
-      {aba === 'privacidade' && <Privacidade />}
-    </>
-  );
-}
+import { ir, useDados, useEstado } from '../nucleo';
+import { Aviso, Carregando, Copiar } from '../componentes/comuns';
 
 /** Roteiro de implantacao: some sozinho quando tudo estiver feito (ou quando a pessoa fechar). */
-function PrimeirosPassos({ irPara }: { irPara: (a: Aba) => void }) {
+export function PrimeirosPassos() {
+  const irPara = (a: string) => ir(`/config?secao=${a}`);
   const { catalogo } = useEstado();
   const usuarios = useDados<Usuario[]>('/admin/usuarios');
   const diag = useDados<RegDiag[]>('/admin/diagnostico');
@@ -46,11 +14,11 @@ function PrimeirosPassos({ irPara }: { irPara: (a: Aba) => void }) {
     try { return localStorage.getItem('primeiros-passos-fechado') === '1'; } catch { return false; }
   });
   if (fechado || !catalogo || !usuarios.dados || !diag.dados) return null;
-  const passos: Array<{ feito: boolean; titulo: string; texto: string; aba: Aba }> = [
-    { feito: catalogo.secretarias.length > 1, titulo: 'Cadastre as secretarias e setores', texto: 'Cada secretaria participante e seus setores (ex.: Infraestrutura → Iluminação Pública).', aba: 'catalogo' },
-    { feito: catalogo.servicos.length > 1, titulo: 'Cadastre os serviços com prazo', texto: 'O que o cidadão pode pedir, em linguagem simples, com setor responsável, prazo em dias úteis e palavras-chave para a IA.', aba: 'catalogo' },
+  const passos: Array<{ feito: boolean; titulo: string; texto: string; aba: string }> = [
+    { feito: catalogo.secretarias.length > 1, titulo: 'Cadastre as secretarias e setores', texto: 'Cada secretaria participante e seus setores (ex.: Infraestrutura → Iluminação Pública).', aba: 'estrutura' },
+    { feito: catalogo.servicos.length > 1, titulo: 'Cadastre os serviços com prazo', texto: 'O que o cidadão pode pedir, em linguagem simples, com setor responsável, prazo em dias úteis e palavras-chave para a IA.', aba: 'estrutura' },
     { feito: catalogo.localidades.some((l) => l.tipo === 'COMUNIDADE_RURAL'), titulo: 'Confira localidades e feriados', texto: 'Ajuste as coordenadas da sede e dos distritos, inclua as comunidades rurais e os feriados municipais.', aba: 'localidades' },
-    { feito: usuarios.dados.length > 1, titulo: 'Cadastre os servidores', texto: 'Atendentes, equipes de campo e gestores. Cada um recebe uma senha provisória e cria a sua no primeiro acesso.', aba: 'usuarios' },
+    { feito: usuarios.dados.length > 1, titulo: 'Cadastre os servidores', texto: 'Atendentes, equipes de campo e gestores. Cada um recebe uma senha provisória e cria a sua no primeiro acesso.', aba: 'equipe' },
     { feito: diag.dados.length > 0, titulo: 'Registre a linha de base', texto: 'Volume atual, tempos e canais levantados no diagnóstico, com fonte. Isso permite medir a melhoria.', aba: 'diagnostico' },
   ];
   const feitos = passos.filter((p) => p.feito).length;
@@ -74,61 +42,9 @@ function PrimeirosPassos({ irPara }: { irPara: (a: Aba) => void }) {
   );
 }
 
-interface Usuario { id: number; nome: string; email: string; telefone: string | null; papel: Papel; secretariaId: number | null; setorId: number | null; ativo: number; secretaria: string | null; setor: string | null }
+interface Usuario { id: number }
 
-function Usuarios() {
-  const { catalogo } = useEstado();
-  const { dados, recarregar } = useDados<Usuario[]>('/admin/usuarios');
-  const vazio = { id: 0, nome: '', email: '', telefone: '', papel: 'ATENDENTE' as Papel, secretariaId: '', setorId: '', ativo: true, senha: '' };
-  const [f, setF] = useState(vazio);
-  const [msg, setMsg] = useState<{ t: 'ok' | 'erro'; m: string } | null>(null);
-  if (!dados || !catalogo) return <Carregando />;
-  const salvar = async () => {
-    setMsg(null);
-    const corpo = { nome: f.nome, email: f.email, telefone: f.telefone || null, papel: f.papel, secretariaId: f.secretariaId ? Number(f.secretariaId) : null, setorId: f.setorId ? Number(f.setorId) : null, ativo: f.ativo, senha: f.senha || undefined };
-    try {
-      if (f.id) await api('PUT', `/admin/usuarios/${f.id}`, corpo);
-      else {
-        const r = await post<{ senhaProvisoria: string | null }>('/admin/usuarios', corpo);
-        if (r.senhaProvisoria) setMsg({ t: 'ok', m: `Servidor criado. Senha provisória: ${r.senhaProvisoria} (entregue por canal seguro).` });
-      }
-      if (f.id) setMsg({ t: 'ok', m: 'Alterações salvas. Sessões ativas do servidor foram encerradas se o perfil mudou.' });
-      setF(vazio);
-      recarregar();
-    } catch (e) {
-      setMsg({ t: 'erro', m: (e as Error).message });
-    }
-  };
-  return (
-    <div className="grade g2" style={{ alignItems: 'start' }}>
-      <div className="cartao rolagem-x">
-        <h2>Servidores</h2>
-        <table><thead><tr><th>Nome</th><th>Perfil</th><th>Lotação</th><th></th></tr></thead>
-          <tbody>{dados.map((u) => (
-            <tr key={u.id} style={{ opacity: u.ativo ? 1 : 0.5 }}>
-              <td>{u.nome}<div className="pequeno mudo">{u.email}</div></td><td className="pequeno">{PAPEL_TEXTO[u.papel]}</td><td className="pequeno">{[u.secretaria, u.setor].filter(Boolean).join(' / ') || '—'}</td>
-              <td><button className="botao sec peq" onClick={() => setF({ id: u.id, nome: u.nome, email: u.email, telefone: u.telefone ?? '', papel: u.papel, secretariaId: String(u.secretariaId ?? ''), setorId: String(u.setorId ?? ''), ativo: !!u.ativo, senha: '' })}>Editar</button></td>
-            </tr>
-          ))}</tbody></table>
-      </div>
-      <div className="cartao">
-        <h2>{f.id ? 'Editar servidor' : 'Novo servidor'}</h2>
-        <div className="campo"><label htmlFor="u-n">Nome</label><input id="u-n" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} /></div>
-        <div className="campo"><label htmlFor="u-e">E-mail institucional</label><input id="u-e" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></div>
-        <div className="campo"><label htmlFor="u-p">Perfil</label><select id="u-p" value={f.papel} onChange={(e) => setF({ ...f, papel: e.target.value as Papel })}>{PAPEIS.filter((p) => p !== 'CIDADAO').map((p) => <option key={p} value={p}>{PAPEL_TEXTO[p]}</option>)}</select></div>
-        <div className="campo"><label htmlFor="u-s">Secretaria</label><select id="u-s" value={f.secretariaId} onChange={(e) => setF({ ...f, secretariaId: e.target.value, setorId: '' })}><option value="">—</option>{catalogo.secretarias.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
-        <div className="campo"><label htmlFor="u-st">Setor</label><select id="u-st" value={f.setorId} onChange={(e) => setF({ ...f, setorId: e.target.value })}><option value="">—</option>{catalogo.setores.filter((s) => !f.secretariaId || s.secretariaId === Number(f.secretariaId)).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
-        <div className="campo"><label htmlFor="u-pw">{f.id ? 'Nova senha (opcional)' : 'Senha inicial (vazio = gerar)'}</label><input id="u-pw" type="password" value={f.senha} onChange={(e) => setF({ ...f, senha: e.target.value })} autoComplete="new-password" /></div>
-        <label className="check campo"><input type="checkbox" checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} /><span>Ativo</span></label>
-        <p className="ajuda">Equipe de campo e gestor de setor precisam de setor; gestor de secretaria precisa de secretaria. O perfil define o que a pessoa vê e faz — conferido também pela API.</p>
-        {msg && <Aviso tipo={msg.t}>{msg.m}</Aviso>}
-        <div className="linha"><button className="botao" onClick={() => void salvar()}>Salvar</button>{f.id > 0 && <button className="botao sec" onClick={() => setF(vazio)}>Novo</button>}</div>
-      </div>
-    </div>
-  );
-}
-
-function CatalogoAdmin() {
+export function CatalogoAdmin() {
   const { recarregarCatalogo } = useEstado();
   const { dados, recarregar } = useDados<Catalogo>('/admin/catalogo');
   const vazio = { id: 0, nome: '', setorId: '', descricao: '', palavrasChave: '', prazoDiasUteis: 5, prioridadePadrao: 'NORMAL' as Prioridade, ativo: true };
@@ -188,7 +104,7 @@ function CatalogoAdmin() {
   );
 }
 
-function Localidades() {
+export function Localidades() {
   const { recarregarCatalogo } = useEstado();
   const { dados, recarregar } = useDados<Catalogo & { feriados: Array<{ data: string; nome: string }> }>('/admin/catalogo');
   const [f, setF] = useState({ id: 0, nome: '', tipo: 'COMUNIDADE_RURAL' as TipoLocalidade, lat: '', lng: '' });
@@ -233,7 +149,7 @@ const ITENS_DIAGNOSTICO = [
 ];
 interface RegDiag { id: number; indicador: string; valor: string; unidade: string | null; periodo: string | null; fonte: string; observacao: string | null; validado: number; registrado_por_nome: string; criado_em: string }
 
-function Diagnostico() {
+export function Diagnostico() {
   const { pode } = useEstado();
   const { dados, recarregar } = useDados<RegDiag[]>('/admin/diagnostico');
   const [f, setF] = useState({ indicador: ITENS_DIAGNOSTICO[0]!, valor: '', unidade: '', periodo: '', fonte: '', observacao: '' });
@@ -270,7 +186,7 @@ function Diagnostico() {
 
 interface RegAud { id: number; em: string; usuario: string | null; acao: string; entidade: string | null; entidadeId: string | null; detalhes: string; ip: string | null }
 
-function Auditoria() {
+export function Auditoria() {
   const [acao, setAcao] = useState('');
   const { dados } = useDados<{ cadeia: { integra: boolean; registros: number; quebraEm: number | null }; registros: RegAud[] }>(`/admin/auditoria?acao=${encodeURIComponent(acao)}`);
   if (!dados) return <Carregando />;
@@ -284,7 +200,7 @@ function Auditoria() {
   );
 }
 
-function Dados() {
+export function Dados() {
   const { dados, recarregar } = useDados<Array<{ arquivo: string; tamanho: number }>>('/admin/backups');
   const [msg, setMsg] = useState<string | null>(null);
   return (
@@ -305,7 +221,7 @@ function Dados() {
   );
 }
 
-function Integracao() {
+export function Integracao() {
   const { dados, recarregar } = useDados<Array<{ id: number; nome: string; escopos: string; criadoEm: string; revogadoEm: string | null; ultimoUso: string | null }>>('/admin/tokens');
   const [f, setF] = useState({ nome: '', escopos: ['demandas:ler'] });
   const [novo, setNovo] = useState<string | null>(null);
@@ -328,7 +244,7 @@ function Integracao() {
   );
 }
 
-function Privacidade() {
+export function Privacidade() {
   const { dados, recarregar } = useDados<{ retencaoDias: number; limiarSupressao: number; iaProvedor: string; comDadosPessoais: number; anonimizadas: number; anonimas: number }>('/admin/privacidade');
   const [msg, setMsg] = useState<string | null>(null);
   if (!dados) return <Carregando />;

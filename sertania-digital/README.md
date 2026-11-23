@@ -40,7 +40,7 @@ npm start
 
 Esse modo serve a API e a interface na porta 3000. Os outros comandos são:
 
-- `npm test`: 19 testes, entre unitários e de ponta a ponta pela API HTTP.
+- `npm test`: 20 testes, entre unitários e de ponta a ponta pela API HTTP.
 - `npm run typecheck`: verificação de tipos.
 - `npm run backup`: backup manual do banco (`npm run backup:prod` no build de produção).
 - `npm run iniciar -- --demonstracao --recriar`: apaga e recria o banco de demonstração.
@@ -59,16 +59,76 @@ A configuração fica em `.env` (veja `.env.example`). Para usar o Claude na tri
    O banco nasce só com o mínimo: a SAD com o setor “Protocolo Geral”, o serviço “Outro assunto / não sei o setor”, a sede e os distritos (coordenadas aproximadas) e os feriados nacionais e de PE. Com `--modelo`, ele já vem com um catálogo modelo de 7 secretarias e 15 serviços para ajustar, ainda sem pessoas nem demandas.
 3. **Subir o sistema** com `npm start`. Como ainda não existe administrador, o terminal mostra um **código de instalação**, por exemplo `HTVCVMZK77`.
 4. **Primeiro acesso.** Abra o endereço no navegador: a única tela disponível pede o código, o nome, o e-mail e a senha de quem vai administrar. Sem o código, que só aparece para quem tem acesso ao servidor, ninguém consegue se tornar administrador. Depois de usado, ele deixa de valer.
-5. **Primeiros passos.** A tela de Administração mostra um roteiro com o andamento:
+5. **Primeiros passos.** A tela “Meu dia” e **Configurações › Meus dados** mostram um roteiro com o andamento:
    1. secretarias e setores;
    2. serviços com prazo e palavras-chave;
    3. localidades (incluir as comunidades rurais) e feriados municipais;
    4. servidores;
    5. linha de base do diagnóstico.
-6. **Servidores.** O administrador cadastra cada servidor com perfil e lotação, e o sistema gera uma **senha provisória**. No primeiro login, a pessoa é obrigada a criar a própria senha antes de ver qualquer dado.
+6. **Servidores.** Em **Configurações › Equipe**, o administrador cadastra cada servidor com perfil e lotação. A senha inicial pode ser digitada ou gerada pelo sistema, e por padrão a pessoa é obrigada a criar a própria senha no primeiro login, antes de ver qualquer dado.
+   - **Esqueci minha senha:** o servidor pede pela tela de login. O pedido aparece em destaque na lista da equipe, e o administrador gera uma senha provisória com um clique. A tela responde igual para e-mails que existem e que não existem, então não revela quem tem conta.
+   - **Quem pode o quê:** em **Configurações › Quem pode o quê**, o administrador marca, numa matriz, o que cada um dos 6 perfis da equipe pode fazer, entre as 18 permissões agrupadas por módulo. Permissões sensíveis são destacadas, toda mudança vai para a auditoria e o perfil pode voltar ao padrão. O escopo (setor, secretaria ou município) continua definido pelo perfil, e a administração nunca perde o acesso a esta tela.
+   - **Organização:** nome do sistema, órgão, contatos, horário e um aviso para a página inicial, em **Configurações › Órgão**.
 7. **Teste ponta a ponta e divulgação.** Registre uma solicitação de teste, percorra o fluxo até a avaliação e então divulgue o endereço. O cidadão **não precisa de conta**: basta o protocolo e o código de acesso.
 
 Rotina: backup automático diário em `dados/backups` (copie a pasta para fora do servidor). Para gerar um na hora, use `npm run backup:prod`. Os parâmetros também podem ir na linha de comando: `node dist/server/server/index.js --porta=8080 --dados=D:/sertania --modo-inicial=limpo`.
+
+## Identidade visual
+
+- **Cores:**
+  - o verde da Prefeitura (`#11643a`) como cor principal;
+  - o amarelo do sol (`#f0b400`) para destaques e foco.
+
+  O tema de noite tem tons próprios.
+- **Letras:**
+  - **Zilla Slab** nos títulos, que lembra os cartazes e folhetos de cordel;
+  - **Atkinson Hyperlegible** no texto, uma fonte desenhada para leitura fácil.
+
+  As duas vêm embutidas no app, funcionam sem internet e não dependem de serviços externos.
+- **Marca:** sol de xilogravura nascendo atrás de um mandacaru.
+- **Grafismos:**
+  - faixa em zigue-zague de xilogravura;
+  - cartões com sombra de carimbo;
+  - selo de lotação inclinado, como carimbo de repartição.
+
+Os tokens ficam em `src/web/estilos-base.css`.
+
+## Apresentação (PDF e vídeo)
+
+Os arquivos ficam em `apresentacao/`:
+
+- `Sertania-Digital-apresentacao.pdf`: 21 slides com as telas reais;
+- `Sertania-Digital-apresentacao.mp4`: cerca de 3 minutos, 1280×720, navegando pelo sistema com legendas.
+
+Para refazê-los, deixe `npm run dev` rodando e use:
+
+```powershell
+npm run apresentacao:capturas
+npm run apresentacao:pdf
+npm run apresentacao:video
+```
+
+Os scripts usam o Chrome instalado na máquina e, para o vídeo, o `ffmpeg` no PATH. Todas as telas mostram dados de demonstração.
+
+## Área da equipe
+
+Depois de entrar, servidores vão para a área da equipe (`#/equipe`):
+
+- **Entrada:** paisagem do sertão e a pergunta “Como você quer entrar?”, com dois caminhos.
+  - **Equipe:** login e “Perdi o acesso à minha senha”.
+  - **Cidadão:** mostra primeiro que **não precisa de conta**, com botões para fazer e acompanhar pedidos. A conta é opcional.
+- **Coluna de tinta** com seções Atender, Acompanhar, Ajustar e Portal público. Ela pode ser estreitada para ícones e vira gaveta no celular. Cada item só aparece com a permissão.
+- **Barra da tela** com o título da página, o **carimbo de lotação** (secretaria e setor), leitura acessível, tema de dia ou de noite, o botão **?** com o *Guia da tela* em passos numerados, e o menu da conta.
+- **Meu dia:**
+  - termômetro com os números do escopo, cada um abrindo a fila filtrada;
+  - **Na frente da fila**, com as 6 solicitações mais urgentes;
+  - caminhos fixados;
+  - “O que mudou”.
+- **Configurações** com índice lateral:
+  - **Você:** meus dados, senha e acesso, leitura.
+  - **Prefeitura:** órgão, secretarias e serviços, localidades e feriados, linha de base.
+  - **Pessoas e acesso:** a **Equipe** em crachás, com cadastro em gaveta lateral e pedidos de nova senha em destaque, e **Quem pode o quê**, uma matriz com todos os perfis lado a lado, editável e com as mudanças destacadas.
+  - **Dados e conformidade:** auditoria, backup, integrações e privacidade.
 
 ## Análise do repositório original
 

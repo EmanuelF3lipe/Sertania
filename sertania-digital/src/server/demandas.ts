@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { Banco } from './db.js';
 import { agoraIso } from './db.js';
 import {
-  CANAIS, ESCOPO_PAPEL, PRIORIDADES, REGRAS, RESULTADOS, STATUS_TEXTO, comandosPermitidos, podeTransicionar, tem,
+  CANAIS, ESCOPO_PAPEL, PRIORIDADES, REGRAS, RESULTADOS, STATUS_TEXTO, comandosPermitidos, podeTransicionar,
   type AnexoDto, type Canal, type Comando, type DemandaDetalhe, type DemandaResumo, type EventoDto, type Prioridade,
   type Resultado, type Status, type UsuarioSessao,
 } from '../shared/dominio.js';
@@ -112,7 +112,7 @@ function anexosDe(banco: Banco, demandaId: number): Array<AnexoDto & { evento_id
  */
 export function paraDetalhe(banco: Banco, d: LinhaDemanda, u: UsuarioSessao | null): DemandaDetalhe {
   const interno = u !== null && u.papel !== 'CIDADAO';
-  const completo = interno && tem(u.papel, 'demanda.ver_dados_pessoais');
+  const completo = interno && u.permissoes.includes('demanda.ver_dados_pessoais');
   const anexos = anexosDe(banco, d.id);
   const eventos = banco
     .all<{ id: number; tipo: string; de_status: Status | null; para_status: Status | null; texto_publico: string | null; nota_interna: string | null; autor_id: number | null; autor_nome: string; criado_em: string }>(
@@ -232,8 +232,8 @@ function notificar(banco: Banco, demandaId: number, protocolo: string, status: S
 
 export function podeExecutar(u: UsuarioSessao | null, d: LinhaDemanda, c: Comando): boolean {
   if (!u || !noEscopo(u, d)) return false;
-  const triagem = tem(u.papel, 'demanda.triagem');
-  const executar = tem(u.papel, 'demanda.executar');
+  const triagem = u.permissoes.includes('demanda.triagem');
+  const executar = u.permissoes.includes('demanda.executar');
   switch (c) {
     case 'ENCAMINHAR': case 'REABRIR': return triagem;
     case 'SOLICITAR_INFO': case 'CANCELAR': return triagem || executar;

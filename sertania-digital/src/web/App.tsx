@@ -3,25 +3,30 @@ import { PAPEL_TEXTO } from '../shared/dominio';
 import { useDados, useEstado, useOnline, usePreferencias, useRota } from './nucleo';
 import { sincronizar } from './offline';
 import { Aviso, Carregando } from './componentes/comuns';
-import { Acompanhar, Entrar, MinhasDemandas, Transparencia } from './telas/publico';
+import { Acompanhar, MinhasDemandas, Transparencia } from './telas/publico';
+import { Entrar } from './telas/entrar';
+import { InicioEquipe } from './telas/equipe';
+import { Configuracoes } from './telas/config';
+import { Casca, MarcaSertania } from './componentes/casca';
 import { Inicio } from './telas/inicio';
 import { PrimeiroAcesso, TrocarSenha } from './telas/acesso';
 import { NovaDemanda } from './telas/nova-demanda';
 import { DetalheDemanda, Fila } from './telas/gestao';
 import { IaAlertas, MapaTela, Painel, Relatorios } from './telas/paineis';
-import { Admin } from './telas/admin';
 
 function Marca() {
+  const { instalacao } = useEstado();
+  const par = instalacao?.parametros;
   return (
     <a className="marca" href="#/">
-      <svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#ffffff" /><path d="M8 21c3 2 6 2 8 0s5-2 8 0M8 15c3 2 6 2 8 0s5-2 8 0" stroke="#11643a" strokeWidth="2.4" fill="none" strokeLinecap="round" /><circle cx="23" cy="9" r="2.5" fill="#f0b400" /></svg>
-      <span>Sertânia Digital<small>Prefeitura Municipal de Sertânia – PE</small></span>
+      <MarcaSertania tamanho={38} />
+      <span>{par?.nomeSistema ?? 'Sertânia Digital'}<small>{par?.orgao ?? 'Prefeitura Municipal de Sertânia – PE'}</small></span>
     </a>
   );
 }
 
 function Topo() {
-  const { usuario, pode, sair } = useEstado();
+  const { usuario, sair } = useEstado();
   const { caminho } = useRota();
   const [aberto, setAberto] = useState(false);
   const { p, alternar } = usePreferencias();
@@ -29,6 +34,7 @@ function Topo() {
   const link = (href: string, rotulo: string) => <a href={`#${href}`} aria-current={caminho === href || (href !== '/' && caminho.startsWith(href)) ? 'page' : undefined}>{rotulo}</a>;
   return (
     <header>
+      <div className="faixa-cordel" aria-hidden="true" />
       <div className="barra-acess" aria-label="Acessibilidade">
         <div className="int">
           <span>Acessibilidade:</span>
@@ -46,12 +52,7 @@ function Topo() {
             {link('/nova', 'Registrar')}
             {link('/acompanhar', 'Acompanhar')}
             {usuario?.papel === 'CIDADAO' && link('/minhas', 'Minhas')}
-            {pode('demanda.ver') && link('/gestao/fila', 'Fila')}
-            {pode('painel.ver') && link('/gestao/painel', 'Painel')}
-            {pode('demanda.ver') && link('/gestao/mapa', 'Mapa')}
-            {pode('painel.ver', 'demanda.triagem', 'demanda.executar') && link('/gestao/alertas', 'Alertas e IA')}
-            {pode('relatorio.gerar', 'painel.ver') && link('/gestao/relatorios', 'Relatórios')}
-            {pode('admin.usuarios', 'auditoria.ver', 'admin.diagnostico') && link('/admin', 'Administração')}
+            {usuario && usuario.papel !== 'CIDADAO' && link('/equipe', 'Área da equipe')}
             {link('/transparencia', 'Transparência')}
             {usuario ? (
               <button className="link" onClick={() => void sair()} title={`${usuario.nome} – ${PAPEL_TEXTO[usuario.papel]}`}>Sair ({usuario.nome.split(' ')[0]})</button>
@@ -101,18 +102,22 @@ export function App() {
   }, [online]);
 
   const [a, b] = partes;
+  const equipe = !!usuario && usuario.papel !== 'CIDADAO';
   let tela: ReactNode;
+  let interna = false;
   if (instalacao?.precisaPrimeiroAcesso) tela = <PrimeiroAcesso />;
   else if (usuario?.deveTrocarSenha) tela = <TrocarSenha />;
+  else if (a === 'entrar') return <Entrar />;
   else if (!a) tela = <Inicio />;
   else if (a === 'nova') tela = <NovaDemanda />;
   else if (a === 'acompanhar') tela = <Acompanhar />;
   else if (a === 'transparencia') tela = <Transparencia />;
-  else if (a === 'entrar') tela = <Entrar />;
   else if (a === 'minhas') tela = <MinhasDemandas />;
-  else if (a === 'api') tela = <ApiDocs />;
-  else if (a === 'admin') tela = <Restrito permitido={pode('admin.usuarios', 'auditoria.ver', 'admin.diagnostico')}><Admin /></Restrito>;
+  else if (a === 'api') { tela = <ApiDocs />; interna = equipe; }
+  else if (a === 'equipe') { tela = <Restrito permitido={equipe}><InicioEquipe /></Restrito>; interna = true; }
+  else if (a === 'config' || a === 'admin') { tela = <Restrito permitido={equipe}><Configuracoes /></Restrito>; interna = true; }
   else if (a === 'gestao') {
+    interna = true;
     if (b === 'fila') tela = <Restrito permitido={pode('demanda.ver')}><Fila /></Restrito>;
     else if (b === 'demanda') tela = <Restrito permitido={pode('demanda.ver')}><DetalheDemanda /></Restrito>;
     else if (b === 'assistido') tela = <Restrito permitido={pode('demanda.registrar_assistido')}><NovaDemanda assistido /></Restrito>;
@@ -121,14 +126,28 @@ export function App() {
     else if (b === 'alertas') tela = <Restrito permitido={pode('painel.ver', 'demanda.triagem', 'demanda.executar')}><IaAlertas /></Restrito>;
     else if (b === 'relatorios') tela = <Restrito permitido={pode('relatorio.gerar', 'painel.ver')}><Relatorios /></Restrito>;
   }
+  const faixas = (
+    <>
+      {!online && <div className="offline-faixa" role="status">Sem internet. Você pode continuar registrando: enviaremos quando a conexão voltar.</div>}
+      {sincronizadas > 0 && <Aviso tipo="ok">{sincronizadas} solicitação(ões) guardadas no aparelho foram enviadas. Veja os protocolos na página inicial.</Aviso>}
+    </>
+  );
+  const conteudo = tela ?? <Aviso tipo="erro">Página não encontrada. <a href="#/">Voltar ao início</a></Aviso>;
+  if (interna && equipe) {
+    return (
+      <>
+        <a className="pular" href="#conteudo" onClick={(e) => { e.preventDefault(); document.getElementById('conteudo')?.focus(); }}>Pular para o conteúdo</a>
+        <Casca><main id="conteudo" className="conteudo-interno" tabIndex={-1}>{faixas}{conteudo}</main></Casca>
+      </>
+    );
+  }
   return (
     <>
       <a className="pular" href="#conteudo" onClick={(e) => { e.preventDefault(); document.getElementById('conteudo')?.focus(); }}>Pular para o conteúdo</a>
       <Topo />
-      {!online && <div className="offline-faixa" role="status">Sem internet. Você pode continuar registrando: enviaremos quando a conexão voltar.</div>}
       <main id="conteudo" tabIndex={-1}>
-        {sincronizadas > 0 && <Aviso tipo="ok">{sincronizadas} solicitação(ões) guardadas no aparelho foram enviadas. Veja os protocolos na página inicial.</Aviso>}
-        {tela ?? <Aviso tipo="erro">Página não encontrada. <a href="#/">Voltar ao início</a></Aviso>}
+        {faixas}
+        {conteudo}
       </main>
     </>
   );

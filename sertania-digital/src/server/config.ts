@@ -21,6 +21,17 @@ export interface Config {
   producao: boolean;
   /** Conteudo criado quando o banco esta vazio: demonstracao, modelo ou limpo. */
   modoInicial: 'demonstracao' | 'modelo' | 'limpo';
+  /** Servidor de mapas (modelo de URL Leaflet) e atribuicao exigida pelo provedor. */
+  mapaTiles: string;
+  mapaAtribuicao: string;
+}
+
+/** Padrao: servidores da OpenStreetMap, sem subdominios (recomendacao atual da politica de uso). */
+export const MAPA_PADRAO = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+/** Origem do servidor de mapas, para liberar as imagens na politica de seguranca (CSP). */
+export function origemMapa(modelo: string): string {
+  try { return new URL(modelo.replace(/\{s\}/g, 'a').replace(/\{[a-z]\}/g, '0')).origin.replace('://a.', '://*.'); } catch { return 'https://tile.openstreetmap.org'; }
 }
 
 /** Aceita tambem --porta=3000 --dados=./dados --modo-inicial=limpo --ia=claude na linha de comando. */
@@ -45,6 +56,8 @@ export function lerConfig(sobrescrever: Partial<Config> = {}): Config {
     limiarSupressao: Number(env['LIMIAR_SUPRESSAO'] ?? 5),
     producao: env['NODE_ENV'] === 'production',
     modoInicial: env['MODO_INICIAL'] === 'limpo' ? 'limpo' : env['MODO_INICIAL'] === 'modelo' ? 'modelo' : 'demonstracao',
+    mapaTiles: env['MAPA_TILES'] || MAPA_PADRAO,
+    mapaAtribuicao: env['MAPA_ATRIBUICAO'] || '© colaboradores do OpenStreetMap',
     ...sobrescrever,
   };
 }

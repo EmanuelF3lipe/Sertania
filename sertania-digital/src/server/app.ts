@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import multer from 'multer';
 import { Banco } from './db.js';
-import { lerConfig, type Config } from './config.js';
+import { lerConfig, origemMapa, type Config } from './config.js';
 import { middlewareSessao } from './auth.js';
 import { ErroHttp } from './erros.js';
 import type { Ctx } from './contexto.js';
@@ -34,12 +34,13 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
   app.set('trust proxy', 'loopback');
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Referrer-Policy', 'same-origin');
+    // Envia so a ORIGEM (nunca o caminho) para outros sites: o servidor de mapas exige saber de qual site vem o pedido.
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=()');
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+      `default-src 'self'; img-src 'self' data: blob: ${origemMapa(config.mapaTiles)}; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'`,
     );
     next();
   });

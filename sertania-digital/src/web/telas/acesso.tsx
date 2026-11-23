@@ -18,7 +18,7 @@ export function PrimeiroAcesso() {
       const r = await post<{ csrf: string; usuario: UsuarioSessao }>('/configuracao/primeiro-acesso', f);
       definirUsuario(r.usuario, r.csrf);
       recarregarInstalacao();
-      ir('/admin?inicio=1');
+      ir('/equipe');
     } catch (e) {
       setErro((e as Error).message);
     } finally {
@@ -60,7 +60,7 @@ export function TrocarSenha() {
     try {
       const r = await post<{ csrf: string; usuario: UsuarioSessao }>('/auth/trocar-senha', { atual: f.atual, nova: f.nova });
       definirUsuario(r.usuario, r.csrf);
-      ir(r.usuario.papel === 'CIDADAO' ? '/minhas' : '/gestao/fila');
+      ir(r.usuario.papel === 'CIDADAO' ? '/minhas' : '/equipe');
     } catch (e) {
       setErro((e as Error).message);
     }

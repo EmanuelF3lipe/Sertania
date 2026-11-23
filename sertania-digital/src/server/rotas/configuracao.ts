@@ -7,6 +7,7 @@ import { auditar } from '../auditoria.js';
 import { agoraIso } from '../db.js';
 import { ErroHttp, invalido } from '../erros.js';
 import type { Papel } from '../../shared/dominio.js';
+import { lerParametros } from './admin.js';
 
 /**
  * Primeiro acesso de uma instalacao nova (banco sem administrador).
@@ -29,6 +30,8 @@ export function prepararPrimeiroAcesso(ctx: Ctx): string | null {
   return codigo;
 }
 
+export const VERSAO = '1.1.0';
+
 let codigoAtual: string | null = null;
 
 export function rotasConfiguracao(ctx: Ctx): Router {
@@ -39,6 +42,9 @@ export function rotasConfiguracao(ctx: Ctx): Router {
       precisaPrimeiroAcesso: precisaPrimeiroAcesso(ctx),
       demonstracao: !!ctx.banco.get("SELECT valor FROM contadores WHERE chave = 'seed-demo'"),
       ia: ctx.config.iaProvedor,
+      mapa: { tiles: ctx.config.mapaTiles, atribuicao: ctx.config.mapaAtribuicao },
+      parametros: lerParametros(ctx),
+      versao: VERSAO,
     });
   });
 
@@ -75,7 +81,7 @@ export function rotasConfiguracao(ctx: Ctx): Router {
     codigoAtual = null;
     const s = criarSessao(ctx.banco, usuario.id);
     definirCookie(res, s.token, ctx.config.producao);
-    res.status(201).json({ csrf: s.csrf, usuario: paraSessao(usuario) });
+    res.status(201).json({ csrf: s.csrf, usuario: paraSessao(usuario, ctx.banco) });
   });
 
   return r;

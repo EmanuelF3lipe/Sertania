@@ -3,3 +3,6 @@ dist/
 dados/
 .env
 dados-teste-limpo/
+
+apresentacao/capturas/
+apresentacao/apresentacao.html

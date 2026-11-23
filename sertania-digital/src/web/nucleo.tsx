@@ -25,7 +25,8 @@ export const ir = (caminho: string) => {
 };
 
 // ------------------------------------------------------------------ sessao e catalogo
-export interface Instalacao { precisaPrimeiroAcesso: boolean; demonstracao: boolean; ia: string }
+export interface Parametros { nomeSistema: string; orgao: string; emailContato: string; telefoneContato: string; enderecoAtendimento: string; horarioAtendimento: string; avisoInicio: string }
+export interface Instalacao { precisaPrimeiroAcesso: boolean; demonstracao: boolean; ia: string; parametros: Parametros; versao: string; mapa?: { tiles: string; atribuicao: string } }
 
 interface Estado {
   instalacao: Instalacao | null;
@@ -73,7 +74,7 @@ export function ProvedorEstado({ children }: { children: ReactNode }) {
     instalacao, recarregarInstalacao,
     usuario, carregando, catalogo, recarregarCatalogo,
     definirUsuario: (u, csrf) => {
-      definirCsrf(csrf);
+      if (csrf !== undefined) definirCsrf(csrf);
       setUsuario(u);
     },
     sair: async () => {

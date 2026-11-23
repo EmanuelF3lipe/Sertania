@@ -63,8 +63,9 @@ export function rotasAuth(ctx: Ctx): Router {
     if (antigo) encerrarSessao(ctx.banco, antigo); // rotaciona a sessao
     const s = criarSessao(ctx.banco, u.id);
     definirCookie(res, s.token, ctx.config.producao);
+    ctx.banco.run('UPDATE usuarios SET ultimo_acesso_em = ? WHERE id = ?', agoraIso(), u.id);
     auditar(ctx.banco, { id: u.id, nome: u.nome, ip: req.ip }, 'LOGIN', 'usuario', u.id);
-    res.json({ csrf: s.csrf, usuario: paraSessao(u) });
+    res.json({ csrf: s.csrf, usuario: paraSessao(u, ctx.banco) });
   });
 
   r.post('/sair', (req, res) => {
@@ -89,6 +90,31 @@ export function rotasAuth(ctx: Ctx): Router {
     definirCookie(res, s.token, ctx.config.producao);
     auditar(ctx.banco, ator(req), 'SENHA_TROCADA', 'usuario', u.id);
     res.json({ csrf: s.csrf, usuario: { ...u, deveTrocarSenha: false } });
+  });
+
+  // Esqueci minha senha: sem provedor de e-mail, o pedido vai para a administracao,
+  // que gera uma senha provisoria. A resposta e sempre a mesma, para nao revelar quem tem conta.
+  r.post('/esqueci', limitador(5, 15 * 60_000), (req, res) => {
+    const d = validar(z.object({ email: z.string().max(160) }), req.body);
+    const u = ctx.banco.get<{ id: number; nome: string; papel: Papel; ativo: number }>('SELECT id, nome, papel, ativo FROM usuarios WHERE email = ?', d.email.trim().toLowerCase());
+    if (u && u.ativo && u.papel !== 'CIDADAO') {
+      ctx.banco.run('UPDATE usuarios SET pediu_senha_em = ? WHERE id = ?', agoraIso(), u.id);
+      auditar(ctx.banco, { id: null, nome: 'esqueci-senha', ip: req.ip }, 'SENHA_SOLICITADA', 'usuario', u.id);
+    }
+    res.json({ ok: true });
+  });
+
+  r.put('/perfil', (req, res) => {
+    const u = exigirLogin(req);
+    const d = validar(z.object({ nome: z.string().trim().min(3).max(120), telefone: z.string().max(30).optional().nullable() }), req.body);
+    ctx.banco.run('UPDATE usuarios SET nome = ?, telefone = ? WHERE id = ?', d.nome, d.telefone || null, u.id);
+    auditar(ctx.banco, ator(req), 'PERFIL_ALTERADO', 'usuario', u.id);
+    res.json({ usuario: { ...u, nome: d.nome } });
+  });
+
+  r.get('/perfil', (req, res) => {
+    const u = exigirLogin(req);
+    res.json(ctx.banco.get('SELECT nome, email, telefone, ultimo_acesso_em AS ultimoAcessoEm, criado_em AS criadoEm FROM usuarios WHERE id = ?', u.id));
   });
 
   r.get('/eu', (req, res) => {

@@ -127,58 +127,6 @@ export function Transparencia() {
   );
 }
 
-export function Entrar() {
-  const { definirUsuario, instalacao } = useEstado();
-  const [modo, setModo] = useState<'entrar' | 'cadastro'>('entrar');
-  const [f, setF] = useState({ nome: '', email: '', telefone: '', senha: '', consentimento: false });
-  const [erro, setErro] = useState<string | null>(null);
-  const enviar = async () => {
-    setErro(null);
-    try {
-      const r = await post<{ csrf: string; usuario: UsuarioSessao }>(modo === 'entrar' ? '/auth/entrar' : '/auth/cadastro', modo === 'entrar' ? { email: f.email, senha: f.senha } : f);
-      definirUsuario(r.usuario, r.csrf);
-      ir(r.usuario.deveTrocarSenha ? '/trocar-senha' : r.usuario.papel === 'CIDADAO' ? '/minhas' : '/gestao/fila');
-    } catch (e) {
-      setErro((e as Error).message);
-    }
-  };
-  return (
-    <div className="estreito" style={{ maxWidth: 480 }}>
-      <h1>{modo === 'entrar' ? 'Entrar' : 'Criar conta de cidadão'}</h1>
-      <form className="cartao" onSubmit={(e) => { e.preventDefault(); void enviar(); }}>
-        {modo === 'cadastro' && <div className="campo"><label htmlFor="n">Nome completo</label><input id="n" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} autoComplete="name" /></div>}
-        <div className="campo"><label htmlFor="e">E-mail</label><input id="e" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} autoComplete="username" /></div>
-        {modo === 'cadastro' && <div className="campo"><label htmlFor="t">Telefone (opcional)</label><input id="t" value={f.telefone} onChange={(e) => setF({ ...f, telefone: e.target.value })} inputMode="tel" /></div>}
-        <div className="campo"><label htmlFor="s">Senha</label><input id="s" type="password" value={f.senha} onChange={(e) => setF({ ...f, senha: e.target.value })} autoComplete={modo === 'entrar' ? 'current-password' : 'new-password'} />{modo === 'cadastro' && <div className="ajuda">Mínimo de 8 caracteres, com letras e números.</div>}</div>
-        {modo === 'cadastro' && <label className="check campo"><input type="checkbox" checked={f.consentimento} onChange={(e) => setF({ ...f, consentimento: e.target.checked })} /><span>Concordo com o uso dos meus dados para os atendimentos que eu solicitar (LGPD). Posso exportar ou excluir meus dados a qualquer momento.</span></label>}
-        {erro && <Aviso tipo="erro">{erro}</Aviso>}
-        <button className="botao" style={{ width: '100%' }}>{modo === 'entrar' ? 'Entrar' : 'Criar conta'}</button>
-        <p style={{ marginTop: 12 }}>
-          <button type="button" className="botao sec peq" onClick={() => setModo(modo === 'entrar' ? 'cadastro' : 'entrar')}>{modo === 'entrar' ? 'Não tenho conta: criar' : 'Já tenho conta: entrar'}</button>
-        </p>
-      </form>
-      {instalacao?.demonstracao && <details className="cartao" style={{ marginTop: 16 }}>
-        <summary><strong>Contas de demonstração</strong> (senha <code>Sertania2026</code>)</summary>
-        <ul className="pequeno">
-          {[
-            ['cidadao@sertania.demo', 'Cidadã com conta'],
-            ['atendimento@sertania.demo', 'Atendimento / triagem (todas as secretarias)'],
-            ['gestor.infra@sertania.demo', 'Gestora da Secretaria de Infraestrutura'],
-            ['gestor.iluminacao@sertania.demo', 'Gestor do setor de Iluminação'],
-            ['campo.iluminacao@sertania.demo', 'Equipe de campo – Iluminação'],
-            ['gestor.saude@sertania.demo', 'Gestora da Saúde'],
-            ['admin@sertania.demo', 'Administração (SAD) – visão consolidada'],
-            ['auditor@sertania.demo', 'Controle interno / auditoria'],
-          ].map(([e, d]) => (
-            <li key={e}><button type="button" className="botao sec peq" onClick={() => { setModo('entrar'); setF({ ...f, email: e!, senha: 'Sertania2026' }); }}>{e}</button> {d}</li>
-          ))}
-        </ul>
-      </details>}
-      <p className="ajuda" style={{ marginTop: 12 }}>Servidores: a conta é criada pela administração, que entrega uma senha provisória. No primeiro acesso você cria a sua própria senha.</p>
-    </div>
-  );
-}
-
 export function MinhasDemandas() {
   const { usuario } = useEstado();
   const { dados, erro } = useDados<DemandaResumo[]>(usuario ? '/cidadao/demandas' : null);

@@ -142,6 +142,12 @@ export class Banco {
     const colunas = (t: string) => (this.db.prepare(`PRAGMA table_info(${t})`).all() as Array<{ name: string }>).map((c) => c.name);
     if (!colunas('usuarios').includes('deve_trocar_senha'))
       this.db.exec('ALTER TABLE usuarios ADD COLUMN deve_trocar_senha INTEGER NOT NULL DEFAULT 0');
+    if (!colunas('usuarios').includes('ultimo_acesso_em')) this.db.exec('ALTER TABLE usuarios ADD COLUMN ultimo_acesso_em TEXT');
+    if (!colunas('usuarios').includes('pediu_senha_em')) this.db.exec('ALTER TABLE usuarios ADD COLUMN pediu_senha_em TEXT');
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS parametros (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS perfis_permissoes (papel TEXT PRIMARY KEY, permissoes TEXT NOT NULL, atualizado_em TEXT NOT NULL);
+    `);
   }
 
   private conv(params: Param[]): SQLInputValue[] {

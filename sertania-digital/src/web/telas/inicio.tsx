@@ -50,13 +50,10 @@ export function Inicio() {
       {equipe && (
         <div className="faixa-equipe">
           <span>Olá, <strong>{usuario?.nome.split(' ')[0]}</strong>. Área da equipe:</span>
-          <a href="#/gestao/fila">Fila</a>
-          {pode('painel.ver') && <a href="#/gestao/painel">Painel</a>}
-          <a href="#/gestao/mapa">Mapa</a>
-          {pode('demanda.registrar_assistido') && <a href="#/gestao/assistido">Atendimento assistido</a>}
-          {pode('admin.usuarios') && <a href="#/admin">Administração</a>}
+          <a href="#/equipe">Abrir a área da equipe →</a>
         </div>
       )}
+      {instalacao?.parametros.avisoInicio && <div className="aviso info" role="note">{instalacao.parametros.avisoInicio}</div>}
 
       <section className="heroi">
         <div className="heroi-texto">

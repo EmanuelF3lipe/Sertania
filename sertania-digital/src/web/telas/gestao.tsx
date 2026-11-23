@@ -70,7 +70,8 @@ const VISOES: Array<[string, string]> = [['', 'Todas'], ['triagem', 'Para triage
 export function Fila() {
   const { pode } = useEstado();
   const [f, setF] = useState<Record<string, string>>({ status: 'ABERTAS' });
-  const [visao, setVisao] = useState('');
+  const { query } = useRota();
+  const [visao, setVisao] = useState(() => query.get('visao') ?? '');
   const [pagina, setPagina] = useState(1);
   useEffect(() => setPagina(1), [f, visao]);
   const { dados, erro, carregando, recarregar } = useDados<{ total: number; itens: DemandaResumo[]; limite: number }>(`/gestao/demandas${qs({ ...f, visao, pagina })}`);

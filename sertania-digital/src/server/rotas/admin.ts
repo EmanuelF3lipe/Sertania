@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { PAPEIS, PRIORIDADES, TIPOS_LOCALIDADE } from '../../shared/dominio.js';
+import { ESCOPO_PAPEL, PAPEIS, PAPEL_TEXTO, PERMISSOES, PERMISSOES_FIXAS, PRIORIDADES, TIPOS_LOCALIDADE, TODAS_PERMISSOES, type Papel } from '../../shared/dominio.js';
 import { ator, idParam, validar, type Ctx } from '../contexto.js';
-import { exigir, hashSenha, sha256, validarForcaSenha } from '../auth.js';
+import { exigir, hashSenha, permissoesDoPapel, sha256, validarForcaSenha } from '../auth.js';
 import { auditar, verificarCadeia } from '../auditoria.js';
 import { agoraIso } from '../db.js';
 import { ErroHttp, conflito, invalido, naoEncontrado } from '../erros.js';
@@ -36,7 +36,7 @@ export function rotasAdmin(ctx: Ctx): Router {
   r.get('/usuarios', (req, res) => {
     exigir(req, 'admin.usuarios');
     res.json(b.all(
-      `SELECT u.id, u.nome, u.email, u.telefone, u.papel, u.secretaria_id AS secretariaId, u.setor_id AS setorId, u.ativo, u.criado_em AS criadoEm,
+      `SELECT u.id, u.nome, u.email, u.telefone, u.papel, u.secretaria_id AS secretariaId, u.setor_id AS setorId, u.ativo, u.criado_em AS criadoEm, u.ultimo_acesso_em AS ultimoAcessoEm, u.pediu_senha_em AS pediuSenhaEm, u.deve_trocar_senha AS deveTrocarSenha,
               sc.nome AS secretaria, st.nome AS setor
        FROM usuarios u LEFT JOIN secretarias sc ON sc.id = u.secretaria_id LEFT JOIN setores st ON st.id = u.setor_id
        WHERE u.papel <> 'CIDADAO' ORDER BY u.nome`,
@@ -52,6 +52,7 @@ export function rotasAdmin(ctx: Ctx): Router {
     setorId: z.number().int().nullable(),
     senha: z.string().max(200).optional(),
     ativo: z.boolean().default(true),
+    exigirTroca: z.boolean().default(true),
   });
 
   function validarLotacao(d: z.infer<typeof esquemaUsuario>) {
@@ -73,8 +74,8 @@ export function rotasAdmin(ctx: Ctx): Router {
     if (erro) throw invalido(erro);
     if (b.get('SELECT id FROM usuarios WHERE email = ?', d.email.toLowerCase())) throw conflito('E-mail já cadastrado');
     const { id } = b.run(
-      'INSERT INTO usuarios (nome, email, telefone, senha_hash, papel, secretaria_id, setor_id, ativo, deve_trocar_senha) VALUES (?,?,?,?,?,?,?,?,1)',
-      d.nome, d.email.toLowerCase(), d.telefone ?? null, hashSenha(senha), d.papel, d.secretariaId, d.setorId, d.ativo,
+      'INSERT INTO usuarios (nome, email, telefone, senha_hash, papel, secretaria_id, setor_id, ativo, deve_trocar_senha) VALUES (?,?,?,?,?,?,?,?,?)',
+      d.nome, d.email.toLowerCase(), d.telefone ?? null, hashSenha(senha), d.papel, d.secretariaId, d.setorId, d.ativo, d.exigirTroca || !d.senha ? 1 : 0,
     );
     auditar(b, ator(req), 'USUARIO_CRIADO', 'usuario', id, { papel: d.papel, secretariaId: d.secretariaId, setorId: d.setorId });
     res.status(201).json({ id, senhaProvisoria: d.senha ? null : senha });
@@ -99,6 +100,70 @@ export function rotasAdmin(ctx: Ctx): Router {
     if (!d.ativo || atual.papel !== d.papel) b.run('DELETE FROM sessoes WHERE usuario_id = ?', id);
     auditar(b, ator(req), 'USUARIO_ALTERADO', 'usuario', id, { papelAnterior: atual.papel, papel: d.papel, ativo: d.ativo, senhaRedefinida: Boolean(d.senha) });
     res.json({ ok: true });
+  });
+
+  // Gera uma senha provisoria (atende ao pedido de "esqueci minha senha").
+  r.post('/usuarios/:id/senha-provisoria', (req, res) => {
+    const u = exigir(req, 'admin.usuarios');
+    const id = idParam(req);
+    if (id === u.id) throw invalido('Para a sua própria senha, use Alterar senha');
+    const alvo = b.get<{ papel: string }>('SELECT papel FROM usuarios WHERE id = ?', id);
+    if (!alvo || alvo.papel === 'CIDADAO') throw naoEncontrado();
+    const senha = `Sertania${randomBytes(3).toString('hex')}1`;
+    b.run('UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = 1, pediu_senha_em = NULL WHERE id = ?', hashSenha(senha), id);
+    b.run('DELETE FROM sessoes WHERE usuario_id = ?', id);
+    auditar(b, ator(req), 'SENHA_PROVISORIA_GERADA', 'usuario', id);
+    res.json({ senhaProvisoria: senha });
+  });
+
+  // ----------------------------------------------------------- perfis e permissoes
+  r.get('/perfis', (req, res) => {
+    exigir(req, 'admin.usuarios');
+    const contagem = new Map(b.all<{ papel: string; n: number }>('SELECT papel, COUNT(*) AS n FROM usuarios WHERE ativo = 1 GROUP BY papel').map((x) => [x.papel, x.n]));
+    const ajustados = new Set(b.all<{ papel: string }>('SELECT papel FROM perfis_permissoes').map((x) => x.papel));
+    res.json(PAPEIS.filter((p) => p !== 'CIDADAO').map((p) => ({
+      papel: p, nome: PAPEL_TEXTO[p], escopo: ESCOPO_PAPEL[p], usuarios: contagem.get(p) ?? 0,
+      padrao: PERMISSOES[p], permissoes: permissoesDoPapel(b, p), fixas: PERMISSOES_FIXAS[p] ?? [], personalizado: ajustados.has(p),
+    })));
+  });
+
+  r.put('/perfis/:papel', (req, res) => {
+    exigir(req, 'admin.usuarios');
+    const papel = String(req.params['papel']) as Papel;
+    if (!PAPEIS.includes(papel) || papel === 'CIDADAO') throw naoEncontrado();
+    const d = validar(z.object({ permissoes: z.array(z.enum(TODAS_PERMISSOES as [string, ...string[]])).max(50) }), req.body);
+    const lista = [...new Set([...d.permissoes, ...(PERMISSOES_FIXAS[papel] ?? [])])];
+    const antes = permissoesDoPapel(b, papel);
+    b.run('INSERT INTO perfis_permissoes (papel, permissoes, atualizado_em) VALUES (?,?,?) ON CONFLICT(papel) DO UPDATE SET permissoes = excluded.permissoes, atualizado_em = excluded.atualizado_em',
+      papel, JSON.stringify(lista), agoraIso());
+    auditar(b, ator(req), 'PERFIL_PERMISSOES_ALTERADAS', 'perfil', papel, {
+      incluidas: lista.filter((p) => !(antes as string[]).includes(p)), removidas: antes.filter((p) => !lista.includes(p)),
+    });
+    res.json({ ok: true, permissoes: lista });
+  });
+
+  r.delete('/perfis/:papel', (req, res) => {
+    exigir(req, 'admin.usuarios');
+    const papel = String(req.params['papel']);
+    b.run('DELETE FROM perfis_permissoes WHERE papel = ?', papel);
+    auditar(b, ator(req), 'PERFIL_PERMISSOES_RESTAURADAS', 'perfil', papel);
+    res.json({ ok: true });
+  });
+
+  // ----------------------------------------------------------- organizacao
+  r.get('/parametros', (req, res) => {
+    exigir(req, 'admin.usuarios', 'admin.catalogo');
+    res.json(lerParametros(ctx));
+  });
+
+  r.put('/parametros', (req, res) => {
+    exigir(req, 'admin.usuarios');
+    const d = validar(esquemaParametros, req.body);
+    b.tx(() => {
+      for (const [k, v] of Object.entries(d)) b.run('INSERT INTO parametros (chave, valor) VALUES (?,?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor', k, v ?? '');
+    });
+    auditar(b, ator(req), 'PARAMETROS_ALTERADOS', 'parametros', null, d);
+    res.json(lerParametros(ctx));
   });
 
   // ----------------------------------------------------------- catalogo
@@ -315,5 +380,32 @@ export function rotasIntegracao(ctx: Ctx): Router {
     res.status(r1.repetida ? 200 : 201).json(r1);
   });
 
+  return r;
+}
+
+const PARAMETROS_PADRAO = {
+  nomeSistema: 'Sertânia Digital',
+  orgao: 'Prefeitura Municipal de Sertânia – PE',
+  emailContato: '',
+  telefoneContato: '',
+  enderecoAtendimento: '',
+  horarioAtendimento: '',
+  avisoInicio: '',
+};
+export type Parametros = typeof PARAMETROS_PADRAO;
+const esquemaParametros = z.object({
+  nomeSistema: z.string().trim().min(3).max(60),
+  orgao: z.string().trim().min(3).max(120),
+  emailContato: z.string().trim().max(160),
+  telefoneContato: z.string().trim().max(40),
+  enderecoAtendimento: z.string().trim().max(200),
+  horarioAtendimento: z.string().trim().max(120),
+  avisoInicio: z.string().trim().max(300),
+});
+export function lerParametros(ctx: Ctx): Parametros {
+  const r: Parametros = { ...PARAMETROS_PADRAO };
+  for (const { chave, valor } of ctx.banco.all<{ chave: string; valor: string }>('SELECT chave, valor FROM parametros')) {
+    if (chave in r) (r as Record<string, string>)[chave] = valor;
+  }
   return r;
 }
