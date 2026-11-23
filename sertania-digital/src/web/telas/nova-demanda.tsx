@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BotaoDitado } from '../acessibilidade/painel';
 import { CANAIS, CANAL_TEXTO, type Canal, type SugestaoClassificacao } from '../../shared/dominio';
 import { comprimirImagem, enviarFormulario, post, ErroApi } from '../api';
 import { ir, useEstado, useOnline, useRota } from '../nucleo';
@@ -33,6 +34,15 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
   const [enviando, setEnviando] = useState(false);
   const [gps, setGps] = useState<string | null>(null);
   const [comprovante, setComprovante] = useState<Comprovante | null>(null);
+  const refCartao = useRef<HTMLDivElement>(null);
+  const primeiroPasso = useRef(true);
+
+  // Ao mudar de passo, o foco vai para o titulo do passo: quem usa leitor de tela ouve onde esta.
+  useEffect(() => {
+    if (primeiroPasso.current) { primeiroPasso.current = false; return; }
+    const h = refCartao.current?.querySelector<HTMLElement>('h2');
+    if (h) { h.setAttribute('tabindex', '-1'); h.focus(); }
+  }, [passo]);
 
   // Sugestao de servico enquanto a pessoa escreve (IA local, nada e gravado).
   useEffect(() => {
@@ -104,12 +114,13 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
       <p className="sec">
         {assistido ? 'Registre o pedido de quem procurou a prefeitura pessoalmente, por telefone, WhatsApp ou ouvidoria.' : 'Leva cerca de 2 minutos. Você recebe um número de protocolo para acompanhar.'}
       </p>
-      <ol className="passos" aria-label={`Passo ${passo} de 5`}>
+      <ol className="passos" aria-hidden="true">
         {[1, 2, 3, 4, 5].map((n) => <li key={n} className={n <= passo ? 'feito' : ''} />)}
       </ol>
+      <p className="passos-texto">Passo {passo} de 5</p>
       {!online && <Aviso tipo="alerta">Você está sem internet. Pode preencher normalmente: guardamos no aparelho e enviamos quando o sinal voltar.</Aviso>}
 
-      <div className="cartao">
+      <div className="cartao" ref={refCartao}>
         {passo === 1 && (
           <>
             <h2>1. O que está acontecendo?</h2>
@@ -123,8 +134,9 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
             )}
             <div className="campo">
               <label htmlFor="desc">Descreva o problema com suas palavras</label>
-              <textarea id="desc" value={descricao} maxLength={4000} onChange={(e) => setDescricao(e.target.value)} placeholder="Ex.: A lâmpada do poste em frente à minha casa está apagada há uma semana." />
-              <div className="ajuda">Não escreva CPF ou dados de outras pessoas aqui.</div>
+              <textarea id="desc" value={descricao} maxLength={4000} onChange={(e) => setDescricao(e.target.value)} aria-describedby="desc-ajuda" placeholder="Ex.: A lâmpada do poste em frente à minha casa está apagada há uma semana." />
+              <BotaoDitado campoId="desc" />
+              <div className="ajuda" id="desc-ajuda">Não escreva CPF ou dados de outras pessoas aqui.{assistido ? '' : ' Não consegue escrever? Use o microfone acima ou peça para a Prefeitura registrar por você (veja os contatos em Acessibilidade).'}</div>
             </div>
           </>
         )}
@@ -134,8 +146,8 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
             <h2>2. Qual é o tipo de serviço?</h2>
             {sugestoes.length > 0 && (
               <div className="campo">
-                <label>Sugestões pelo que você escreveu</label>
-                <div className="coluna">
+                <span className="rotulo" id="sug-rotulo">Sugestões pelo que você escreveu</span>
+                <div className="coluna" role="group" aria-labelledby="sug-rotulo">
                   {sugestoes.map((s) => (
                     <button key={s.servicoId} type="button" className={`botao ${servicoId === s.servicoId ? '' : 'sec'}`} style={{ justifyContent: 'flex-start' }} onClick={() => setServicoId(s.servicoId)} aria-pressed={servicoId === s.servicoId}>
                       {servicoId === s.servicoId ? '✓ ' : ''}{s.servico} <span className="pequeno" style={{ fontWeight: 400 }}>– {s.secretaria}</span>
@@ -193,11 +205,13 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
             <div className="grade g2" style={{ marginTop: 12 }}>
               <div className="campo">
                 <label htmlFor="end">Endereço (se houver)</label>
-                <input id="end" value={endereco} onChange={(e) => setEndereco(e.target.value)} placeholder="Rua e número" />
+                <input id="end" value={endereco} onChange={(e) => setEndereco(e.target.value)} placeholder="Rua e número" autoComplete="street-address" />
+                <BotaoDitado campoId="end" rotulo="Falar" />
               </div>
               <div className="campo">
                 <label htmlFor="ref">Ponto de referência</label>
                 <input id="ref" value={referencia} onChange={(e) => setReferencia(e.target.value)} placeholder="Ex.: perto da escola, do açude…" />
+                <BotaoDitado campoId="ref" rotulo="Falar" />
               </div>
             </div>
           </>
@@ -207,7 +221,9 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
           <>
             <h2>4. Fotos ou documentos (opcional)</h2>
             <p className="sec">Uma foto ajuda a equipe a entender o problema. Até 5 arquivos (foto ou PDF).</p>
+            <label htmlFor="arquivos" className="so-leitor">Escolher fotos ou documentos</label>
             <input
+              id="arquivos"
               type="file"
               accept="image/jpeg,image/png,image/webp,application/pdf"
               capture="environment"
@@ -242,6 +258,7 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
                 <div className="campo">
                   <label htmlFor="nome">Nome</label>
                   <input id="nome" value={nome} onChange={(e) => setNome(e.target.value)} autoComplete="name" />
+                  <BotaoDitado campoId="nome" rotulo="Falar" />
                 </div>
                 <div className="campo">
                   <label htmlFor="tel">Telefone / WhatsApp</label>

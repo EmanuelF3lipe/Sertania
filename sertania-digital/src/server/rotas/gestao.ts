@@ -244,7 +244,7 @@ export function rotasGestao(ctx: Ctx): Router {
     const f = lerFiltros(filtros);
     const ind = calcularIndicadores(b, u, f);
     const periodo = `${f.de ?? 'início'} a ${f.ate ?? 'hoje'}`;
-    const n = await gerarNarrativa(ctx.config, paraBasicos(ind), periodo);
+    const n = await gerarNarrativa(b, ctx.config, paraBasicos(ind), periodo);
     const { id } = b.run(
       "INSERT INTO relatorios (titulo, filtros, conteudo, narrativa, narrativa_status, provedor, gerado_por, criado_em) VALUES (?,?,?,?, 'RASCUNHO_IA', ?, ?, ?)",
       titulo, JSON.stringify(f), JSON.stringify(ind), n.texto, n.provedor, u.id, agoraIso(),

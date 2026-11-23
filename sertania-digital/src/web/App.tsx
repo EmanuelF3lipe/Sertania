@@ -1,4 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import { Accessibility, Hand, Volume2 } from 'lucide-react';
+import { Acessibilidade, abrirPainelAcessibilidade } from './acessibilidade/painel';
+import { falaDisponivel, falar, textoDaPagina } from './acessibilidade/voz';
+import { PaginaAcessibilidade } from './telas/acessibilidade';
 import { PAPEL_TEXTO } from '../shared/dominio';
 import { useDados, useEstado, useOnline, usePreferencias, useRota } from './nucleo';
 import { sincronizar } from './offline';
@@ -13,6 +17,18 @@ import { PrimeiroAcesso, TrocarSenha } from './telas/acesso';
 import { NovaDemanda } from './telas/nova-demanda';
 import { DetalheDemanda, Fila } from './telas/gestao';
 import { IaAlertas, MapaTela, Painel, Relatorios } from './telas/paineis';
+
+/** Links para pular direto (aparecem ao usar Tab), com os atalhos do padrao eMAG */
+function AtalhosTopo() {
+  const focar = (sel: string) => (e: MouseEvent) => { e.preventDefault(); const el = document.querySelector<HTMLElement>(sel); el?.focus(); el?.scrollIntoView({ block: 'start' }); };
+  return (
+    <nav className="atalhos-topo" aria-label="Atalhos">
+      <a href="#conteudo" onClick={focar('#conteudo')}>Ir para o conteúdo [Alt+1]</a>
+      <a href="#nav" onClick={focar('#nav a, .ct-nav a')}>Ir para o menu [Alt+2]</a>
+      <a href="#acessibilidade" onClick={(e) => { e.preventDefault(); abrirPainelAcessibilidade(); }}>Acessibilidade [Alt+3]</a>
+    </nav>
+  );
+}
 
 function Marca() {
   const { instalacao } = useEstado();
@@ -29,19 +45,21 @@ function Topo() {
   const { usuario, sair } = useEstado();
   const { caminho } = useRota();
   const [aberto, setAberto] = useState(false);
-  const { p, alternar } = usePreferencias();
+  const { p, alternar, definir } = usePreferencias();
   useEffect(() => setAberto(false), [caminho]);
   const link = (href: string, rotulo: string) => <a href={`#${href}`} aria-current={caminho === href || (href !== '/' && caminho.startsWith(href)) ? 'page' : undefined}>{rotulo}</a>;
   return (
     <header>
       <div className="faixa-cordel" aria-hidden="true" />
-      <div className="barra-acess" aria-label="Acessibilidade">
+      <div className="barra-acess" role="region" aria-label="Acessibilidade">
         <div className="int">
-          <span>Acessibilidade:</span>
-          <button aria-pressed={p.texto === 'grande'} onClick={() => alternar('texto', 'grande')}>A+ Texto maior</button>
-          <button aria-pressed={p.contraste === 'alto'} onClick={() => alternar('contraste', 'alto')}>◐ Alto contraste</button>
-          <button aria-pressed={p.theme === 'dark'} onClick={() => alternar('theme', 'dark')}>☾ Modo escuro</button>
-          <button aria-pressed={p.movimento === 'reduzido'} onClick={() => alternar('movimento', 'reduzido')}>Menos movimento</button>
+          <button className="ba-abrir" aria-haspopup="dialog" onClick={abrirPainelAcessibilidade}><Accessibility size={16} aria-hidden="true" /> Acessibilidade</button>
+          <button aria-pressed={p.texto !== ''} onClick={() => definir('texto', p.texto === '' ? 'grande' : p.texto === 'grande' ? 'enorme' : '')} aria-label={`Tamanho das letras: ${p.texto === 'enorme' ? 'muito grande' : p.texto === 'grande' ? 'grande' : 'normal'}`}>A+ Letras</button>
+          <button aria-pressed={p.contraste === 'alto'} onClick={() => alternar('contraste', 'alto')}>◐ Contraste</button>
+          <button aria-pressed={p.theme === 'dark'} onClick={() => alternar('theme', 'dark')}>☾ Escuro</button>
+          {falaDisponivel() && <button onClick={() => falar(textoDaPagina())}><Volume2 size={15} aria-hidden="true" /> Ouvir a página</button>}
+          <button aria-pressed={p.libras === 'on'} onClick={() => alternar('libras', 'on')}><Hand size={15} aria-hidden="true" /> Libras</button>
+          <a href="#/acessibilidade" className="ba-sobre">Sobre a acessibilidade</a>
         </div>
       </div>
       <div className="topo">
@@ -107,11 +125,12 @@ export function App() {
   let interna = false;
   if (instalacao?.precisaPrimeiroAcesso) tela = <PrimeiroAcesso />;
   else if (usuario?.deveTrocarSenha) tela = <TrocarSenha />;
-  else if (a === 'entrar') return <Entrar />;
+  else if (a === 'entrar') return <><Entrar /><Acessibilidade /></>;
   else if (!a) tela = <Inicio />;
   else if (a === 'nova') tela = <NovaDemanda />;
   else if (a === 'acompanhar') tela = <Acompanhar />;
   else if (a === 'transparencia') tela = <Transparencia />;
+  else if (a === 'acessibilidade') { tela = <PaginaAcessibilidade />; interna = equipe; }
   else if (a === 'minhas') tela = <MinhasDemandas />;
   else if (a === 'api') { tela = <ApiDocs />; interna = equipe; }
   else if (a === 'equipe') { tela = <Restrito permitido={equipe}><InicioEquipe /></Restrito>; interna = true; }
@@ -136,19 +155,21 @@ export function App() {
   if (interna && equipe) {
     return (
       <>
-        <a className="pular" href="#conteudo" onClick={(e) => { e.preventDefault(); document.getElementById('conteudo')?.focus(); }}>Pular para o conteúdo</a>
+        <AtalhosTopo />
         <Casca><main id="conteudo" className="conteudo-interno" tabIndex={-1}>{faixas}{conteudo}</main></Casca>
+        <Acessibilidade />
       </>
     );
   }
   return (
     <>
-      <a className="pular" href="#conteudo" onClick={(e) => { e.preventDefault(); document.getElementById('conteudo')?.focus(); }}>Pular para o conteúdo</a>
+      <AtalhosTopo />
       <Topo />
       <main id="conteudo" tabIndex={-1}>
         {faixas}
         {conteudo}
       </main>
+      <Acessibilidade />
     </>
   );
 }

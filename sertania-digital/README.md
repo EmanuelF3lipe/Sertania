@@ -40,7 +40,7 @@ npm start
 
 Esse modo serve a API e a interface na porta 3000. Os outros comandos são:
 
-- `npm test`: 20 testes, entre unitários e de ponta a ponta pela API HTTP.
+- `npm test`: 27 testes, entre unitários e de ponta a ponta pela API HTTP.
 - `npm run typecheck`: verificação de tipos.
 - `npm run backup`: backup manual do banco (`npm run backup:prod` no build de produção).
 - `npm run iniciar -- --demonstracao --recriar`: apaga e recria o banco de demonstração.
@@ -92,6 +92,25 @@ Rotina: backup automático diário em `dados/backups` (copie a pasta para fora d
   - selo de lotação inclinado, como carimbo de repartição.
 
 Os tokens ficam em `src/web/estilos-base.css`.
+
+## Acessibilidade
+
+Um botão redondo no canto de todas as telas (ou **Alt + 3**) abre o painel de acessibilidade. As escolhas ficam guardadas no aparelho.
+
+- **Quem não enxerga:** funciona com leitores de tela, anuncia a troca de página e lê a página em voz alta ou o que for tocado ou focado, com legenda escrita.
+- **Quem enxerga pouco:** três tamanhos de letra, alto contraste, modo escuro, tons de cinza, cursor grande, destaque de links e guia de leitura.
+- **Quem não ouve:** tradutor de Libras VLibras, do Governo Federal. Ele só carrega quando a pessoa o liga.
+- **Quem não pode digitar:** ditado por voz nos campos, com pontuação falada.
+- **Quem não usa o mouse:** comandos de voz (incluindo "mostrar números" para clicar por número), atalhos de teclado no padrão eMAG e botões maiores.
+- **Leitura e atenção:** fonte de leitura fácil, espaçamento maior e opção sem animações.
+- **Atendimento sem o site:** a página `#/acessibilidade` mostra os contatos de atendimento da Prefeitura.
+
+Ditado e comandos de voz dependem do reconhecimento de voz do navegador: funcionam no Chrome e no Edge, e no Chrome o áudio passa pelo serviço do Google. O código fica em `src/web/acessibilidade/`.
+
+## Manual do sistema (PDF)
+
+O manual completo fica em `documentacao/Sertania-Digital-documentacao.pdf` (A4, cerca de 30 páginas): guia do cidadão, da equipe e da administração, perfis e permissões, segurança e LGPD, instalação, configuração, API e arquitetura.
+Para refazê-lo depois de mudar o sistema, rode `npm run documentacao:pdf`. As telas vêm de `apresentacao/capturas`, geradas por `npm run apresentacao:capturas`.
 
 ## Apresentação (PDF e vídeo)
 
@@ -174,7 +193,7 @@ Depois de entrar, servidores vão para a área da equipe (`#/equipe`):
 | IA com supervisão humana | Sugestão de serviço enquanto o cidadão escreve. Na triagem, classificação, prioridade e resumo com os botões Aceitar, Ajustar e Rejeitar, todos auditados. Detecção de recorrência, alertas (prazo vencendo ou vencido, recorrência, pico por localidade) e narrativa de relatório como rascunho até a revisão do gestor. O indicador de aceitação da IA mede a confiança no apoio automático |
 | Integração por padrões abertos | REST com OpenAPI 3.1 (`/api/openapi.json`, página `#/api`). Tokens com escopos (`demandas:ler`, `demandas:criar`, `indicadores:ler`) que nunca entregam dados pessoais |
 | Segurança, auditoria, backup e LGPD | Senhas em scrypt, CSRF, cabeçalhos de segurança (CSP), limite de tentativas e auditoria encadeada por hash com verificação de integridade. Backup diário e manual (`VACUUM INTO`), exportação completa em JSON, retenção com anonimização automática, minimização por perfil, IA externa só com texto pseudonimizado e dados abertos com supressão de grupos pequenos. O titular pode exportar e excluir seus dados |
-| Território, conectividade e acessibilidade | Funciona como PWA e abre sem internet. Solicitações feitas offline ficam no aparelho e são enviadas quando o sinal volta, sem duplicar. Layout pensado primeiro para o celular, com linguagem simples, texto maior, alto contraste, modo escuro e redução de movimento. Atendimento assistido por canal (presencial, telefone, WhatsApp, ouvidoria) |
+| Território, conectividade e acessibilidade | Funciona como PWA e abre sem internet. Solicitações feitas offline ficam no aparelho e são enviadas quando o sinal volta, sem duplicar. Layout pensado primeiro para o celular, com linguagem simples e painel de acessibilidade (veja a seção Acessibilidade). Atendimento assistido por canal (presencial, telefone, WhatsApp, ouvidoria) |
 | Diagnóstico e linha de base | Cadastro de indicadores reais com fonte e período. A validação exige uma segunda pessoa, e enquanto ela não acontece o painel avisa que os números não são oficiais |
 
 ## Estrutura

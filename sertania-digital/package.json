@@ -20,7 +20,8 @@
     "backup:prod": "node dist/server/server/backup-cli.js",
     "apresentacao:capturas": "node ferramentas/apresentacao/capturar.mjs",
     "apresentacao:pdf": "node ferramentas/apresentacao/montar-pdf.mjs",
-    "apresentacao:video": "node ferramentas/apresentacao/gravar-video.mjs"
+    "apresentacao:video": "node ferramentas/apresentacao/gravar-video.mjs",
+    "documentacao:pdf": "node ferramentas/documentacao/montar-documentacao.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

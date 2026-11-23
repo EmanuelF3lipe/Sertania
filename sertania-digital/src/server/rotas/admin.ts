@@ -15,6 +15,8 @@ import { lerCatalogo } from './publico.js';
 import { calcularIndicadores, lerFiltros } from '../indicadores.js';
 import { abrirDemanda, paraResumo, SELECT_DEMANDA, type LinhaDemanda } from '../demandas.js';
 import { esquemaNova } from './publico.js';
+import { definirLimite, lerLimite, resumoUso } from '../ia/uso.js';
+import { MODELO as MODELO_IA } from '../ia/claude.js';
 
 export function fazerBackup(ctx: Ctx): { arquivo: string; tamanho: number } {
   const pasta = path.join(ctx.config.pastaDados, 'backups');
@@ -148,6 +150,21 @@ export function rotasAdmin(ctx: Ctx): Router {
     b.run('DELETE FROM perfis_permissoes WHERE papel = ?', papel);
     auditar(b, ator(req), 'PERFIL_PERMISSOES_RESTAURADAS', 'perfil', papel);
     res.json({ ok: true });
+  });
+
+  // ----------------------------------------------------------- consumo da IA externa
+  r.get('/ia', (req, res) => {
+    exigir(req, 'admin.integracao');
+    res.json({ provedor: ctx.config.iaProvedor, modelo: MODELO_IA, ...resumoUso(b) });
+  });
+
+  r.put('/ia', (req, res) => {
+    exigir(req, 'admin.integracao');
+    const { limiteTokensMes } = validar(z.object({ limiteTokensMes: z.number().int().min(0).max(10_000_000_000) }), req.body);
+    const anterior = lerLimite(b);
+    definirLimite(b, limiteTokensMes);
+    auditar(b, ator(req), 'IA_LIMITE_ALTERADO', 'parametros', null, { anterior, limiteTokensMes });
+    res.json({ provedor: ctx.config.iaProvedor, modelo: MODELO_IA, ...resumoUso(b) });
   });
 
   // ----------------------------------------------------------- organizacao

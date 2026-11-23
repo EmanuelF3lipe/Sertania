@@ -7,6 +7,7 @@ import '@fontsource/zilla-slab/700.css';
 import './estilos-base.css';
 import './estilos.css';
 import './estilos-equipe.css';
+import './estilos-acess.css';
 import { App } from './App';
 import { ProvedorEstado } from './nucleo';
 

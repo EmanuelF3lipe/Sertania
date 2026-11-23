@@ -147,6 +147,12 @@ export class Banco {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS parametros (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS perfis_permissoes (papel TEXT PRIMARY KEY, permissoes TEXT NOT NULL, atualizado_em TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS ia_uso (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, mes TEXT NOT NULL, criado_em TEXT NOT NULL, operacao TEXT NOT NULL, modelo TEXT NOT NULL,
+        entrada INTEGER NOT NULL DEFAULT 0, saida INTEGER NOT NULL DEFAULT 0, cache_leitura INTEGER NOT NULL DEFAULT 0, cache_escrita INTEGER NOT NULL DEFAULT 0,
+        ok INTEGER NOT NULL DEFAULT 1, erro TEXT, demanda_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS ix_ia_uso_mes ON ia_uso (mes);
     `);
   }
 

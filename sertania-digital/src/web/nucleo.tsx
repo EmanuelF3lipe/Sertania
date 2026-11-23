@@ -94,29 +94,7 @@ export function useEstado(): Estado {
 }
 
 // ------------------------------------------------------------------ preferencias de acessibilidade
-type Pref = 'theme' | 'contraste' | 'texto' | 'movimento';
-const PADRAO: Record<Pref, string> = { theme: '', contraste: '', texto: '', movimento: '' };
-function aplicar(p: Record<Pref, string>) {
-  const r = document.documentElement;
-  for (const [k, v] of Object.entries(p)) {
-    if (v) r.setAttribute(`data-${k}`, v);
-    else r.removeAttribute(`data-${k}`);
-  }
-}
-export function usePreferencias() {
-  const [p, setP] = useState<Record<Pref, string>>(() => {
-    try {
-      return { ...PADRAO, ...(JSON.parse(localStorage.getItem('preferencias') ?? '{}') as Record<Pref, string>) };
-    } catch {
-      return PADRAO;
-    }
-  });
-  useEffect(() => {
-    aplicar(p);
-    try { localStorage.setItem('preferencias', JSON.stringify(p)); } catch { /* ignora */ }
-  }, [p]);
-  return { p, alternar: (k: Pref, v: string) => setP((a) => ({ ...a, [k]: a[k] === v ? '' : v })) };
-}
+export { usePreferencias } from './acessibilidade/preferencias';
 
 // ------------------------------------------------------------------ carregamento de dados
 export function useDados<T>(rota: string | null, deps: unknown[] = []): { dados: T | null; erro: string | null; carregando: boolean; recarregar: () => void } {

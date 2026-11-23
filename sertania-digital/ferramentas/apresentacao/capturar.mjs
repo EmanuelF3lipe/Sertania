@@ -2,6 +2,7 @@
 // Uso: com o "npm run dev" rodando, execute  node ferramentas/apresentacao/capturar.mjs
 import path from 'node:path';
 import { abrirNavegador, novoContexto, entrar, ir, CAPTURAS } from './comum.mjs';
+import { capturarAcessibilidade } from './capturar-acessibilidade.mjs';
 
 const nav = await abrirNavegador();
 const foto = async (page, nome, opcoes = {}) => {
@@ -100,6 +101,8 @@ const foto = async (page, nome, opcoes = {}) => {
   await foto(page, '19-config-auditoria');
   await ir(page, '/config?secao=estrutura', 1500);
   await foto(page, '20-config-servicos');
+  await ir(page, '/config?secao=ia', 1500);
+  await foto(page, '24-config-ia');
   await ctx.close();
 }
 
@@ -121,5 +124,6 @@ const foto = async (page, nome, opcoes = {}) => {
   await ctx.close();
 }
 
+await capturarAcessibilidade(nav);
 await nav.close();
 console.log('Capturas prontas em', CAPTURAS);

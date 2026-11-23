@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  Bell, ChartColumn, Code, Contrast, Eye, FileText, Globe, Headset, Inbox, KeyRound, LogOut, Map as MapaIcone, Menu, Moon, PanelLeftClose,
-  PanelLeftOpen, Settings, Sun, Sunrise, Type, UserRound, X, type LucideIcon,
+  Accessibility, Bell, ChartColumn, Code, Eye, FileText, Globe, Headset, Inbox, KeyRound, LogOut, Map as MapaIcone, Menu, Moon, PanelLeftClose,
+  PanelLeftOpen, Settings, Sun, Sunrise, UserRound, X, type LucideIcon,
 } from 'lucide-react';
 import { ESCOPO_PAPEL, PAPEL_TEXTO, type Permissao } from '../../shared/dominio';
 import { ir, useEstado, usePreferencias, useRota } from '../nucleo';
+import { abrirPainelAcessibilidade } from '../acessibilidade/painel';
 
 export interface ItemMenu { href: string; rotulo: string; icone: LucideIcon; perm?: Permissao[] }
 export interface SecaoMenu { rotulo: string; itens: ItemMenu[] }
@@ -96,17 +97,14 @@ export function Casca({ children }: { children: ReactNode }) {
   const [gaveta, setGaveta] = useState(false);
   const [guia, setGuia] = useState(false);
   const [conta, setConta] = useState(false);
-  const [leitura, setLeitura] = useState(false);
   const refConta = useRef<HTMLDivElement>(null);
-  const refLeitura = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setGaveta(false); setConta(false); setLeitura(false); }, [caminho]);
+  useEffect(() => { setGaveta(false); setConta(false); }, [caminho]);
   useEffect(() => {
     const fora = (e: MouseEvent) => {
       if (refConta.current && !refConta.current.contains(e.target as Node)) setConta(false);
-      if (refLeitura.current && !refLeitura.current.contains(e.target as Node)) setLeitura(false);
     };
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { setConta(false); setLeitura(false); setGuia(false); setGaveta(false); } };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { setConta(false); setGuia(false); setGaveta(false); } };
     document.addEventListener('mousedown', fora);
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', fora); document.removeEventListener('keydown', esc); };
@@ -121,7 +119,7 @@ export function Casca({ children }: { children: ReactNode }) {
   const { titulo, trilha } = titulos(caminho);
   const [, tituloGuia, passos] = guiaDa(caminho);
   const nomeSistema = instalacao?.parametros.nomeSistema ?? 'Sertânia Digital';
-  const escuro = p.theme === 'dark' || (!p.theme && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+  const escuro = p.theme === 'dark';
 
   return (
     <div className={`casca${estreito ? ' estreita' : ''}${gaveta ? ' gaveta-aberta' : ''}`}>
@@ -167,17 +165,7 @@ export function Casca({ children }: { children: ReactNode }) {
               <span className="cl-sigla">{sigla ?? 'PMS'}</span>
               <span className="cl-texto">{setor ?? (ESCOPO_PAPEL[usuario.papel] === 'MUNICIPIO' ? 'Município todo' : 'Secretaria')}</span>
             </span>
-            <div className="ancora" ref={refLeitura}>
-              <button className="icone-botao" aria-label="Leitura e acessibilidade" title="Leitura e acessibilidade" aria-expanded={leitura} onClick={() => setLeitura(!leitura)}><Type size={18} /></button>
-              {leitura && (
-                <div className="cartela" role="menu">
-                  <span className="cartela-titulo">Leitura</span>
-                  <button role="menuitemcheckbox" aria-checked={p.texto === 'grande'} onClick={() => alternar('texto', 'grande')}><Type size={16} /> Letras maiores</button>
-                  <button role="menuitemcheckbox" aria-checked={p.contraste === 'alto'} onClick={() => alternar('contraste', 'alto')}><Contrast size={16} /> Contraste forte</button>
-                  <button role="menuitemcheckbox" aria-checked={p.movimento === 'reduzido'} onClick={() => alternar('movimento', 'reduzido')}><Eye size={16} /> Sem animações</button>
-                </div>
-              )}
-            </div>
+            <button className="icone-botao" aria-label="Acessibilidade: letras, contraste, voz e Libras" title="Acessibilidade (Alt + 3)" aria-haspopup="dialog" onClick={abrirPainelAcessibilidade}><Accessibility size={18} /></button>
             <button className="icone-botao" aria-label={escuro ? 'Usar tema de dia' : 'Usar tema de noite'} title={escuro ? 'Tema de dia' : 'Tema de noite'} onClick={() => alternar('theme', escuro ? 'light' : 'dark')}>
               {escuro ? <Sun size={18} /> : <Moon size={18} />}
             </button>

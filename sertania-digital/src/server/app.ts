@@ -29,6 +29,9 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
   }
   const codigoPrimeiroAcesso = prepararPrimeiroAcesso(ctx);
 
+  // Tradutor de Libras do Governo Federal: so carrega quando a pessoa liga no painel de acessibilidade.
+  // O carregador do vlibras.gov.br busca os arquivos no repositorio oficial do governo no jsDelivr (so esse caminho e liberado).
+  const VLIBRAS = 'https://vlibras.gov.br https://*.vlibras.gov.br https://cdn.jsdelivr.net/gh/spbgovbr-vlibras/';
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 'loopback');
@@ -37,10 +40,10 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
     // Envia so a ORIGEM (nunca o caminho) para outros sites: o servidor de mapas exige saber de qual site vem o pedido.
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=()');
+    res.setHeader('Permissions-Policy', 'camera=(self), geolocation=(self), microphone=(self)');
     res.setHeader(
       'Content-Security-Policy',
-      `default-src 'self'; img-src 'self' data: blob: ${origemMapa(config.mapaTiles)}; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'`,
+      `default-src 'self'; img-src 'self' data: blob: ${origemMapa(config.mapaTiles)} ${VLIBRAS}; font-src 'self' data: ${VLIBRAS}; style-src 'self' 'unsafe-inline' ${VLIBRAS}; script-src 'self' 'wasm-unsafe-eval' ${VLIBRAS}; connect-src 'self' ${VLIBRAS}; worker-src 'self' blob:; frame-src ${VLIBRAS}; media-src 'self' blob: ${VLIBRAS}; frame-ancestors 'none'`,
     );
     next();
   });

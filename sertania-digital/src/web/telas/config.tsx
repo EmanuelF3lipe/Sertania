@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2, Check, ClipboardList, Database, Eye, EyeOff, FileClock, Glasses, KeyRound, Landmark, LockKeyhole, MapPin, Minus, Pencil, Plug,
-  RotateCcw, Search, ShieldAlert, ShieldCheck, UserPlus, UserRound, Users, X, type LucideIcon,
+  RotateCcw, Search, ShieldAlert, ShieldCheck, Sparkles, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import {
   ESCOPO_PAPEL, ESCOPO_TEXTO, PAPEIS, PAPEL_TEXTO, PERMISSAO_INFO, TODAS_PERMISSOES, type Papel, type Permissao, type UsuarioSessao,
 } from '../../shared/dominio';
 import { api, fmtData, post } from '../api';
 import { get } from '../api';
+import { abrirPainelAcessibilidade } from '../acessibilidade/painel';
 import { ir, useDados, useEstado, usePreferencias, useRota, type Parametros } from '../nucleo';
 import { Aviso, Carregando, Copiar } from '../componentes/comuns';
 import { iniciais } from '../componentes/casca';
 import { Auditoria, CatalogoAdmin, Dados, Diagnostico, Integracao, Localidades, PrimeirosPassos, Privacidade } from './admin';
 
-type Secao = 'perfil' | 'seguranca' | 'leitura' | 'orgao' | 'estrutura' | 'localidades' | 'diagnostico' | 'equipe' | 'permissoes' | 'auditoria' | 'dados' | 'integracao' | 'privacidade';
+type Secao = 'perfil' | 'seguranca' | 'leitura' | 'orgao' | 'estrutura' | 'localidades' | 'diagnostico' | 'equipe' | 'permissoes' | 'auditoria' | 'dados' | 'integracao' | 'ia' | 'privacidade';
 interface ItemIndice { id: Secao; rotulo: string; icone: LucideIcon; perm?: Permissao; resumo: string }
 const INDICE: Array<{ grupo: string; itens: ItemIndice[] }> = [
   {
@@ -42,6 +43,7 @@ const INDICE: Array<{ grupo: string; itens: ItemIndice[] }> = [
       { id: 'auditoria', rotulo: 'Auditoria', icone: FileClock, perm: 'auditoria.ver', resumo: 'O registro encadeado de cada ação feita no sistema.' },
       { id: 'dados', rotulo: 'Backup e exportação', icone: Database, perm: 'admin.backup', resumo: 'Cópias de segurança e todos os dados em formato aberto.' },
       { id: 'integracao', rotulo: 'Integrações', icone: Plug, perm: 'admin.integracao', resumo: 'Chaves para outros sistemas usarem a API, sem dados pessoais.' },
+      { id: 'ia', rotulo: 'Consumo da IA', icone: Sparkles, perm: 'admin.integracao', resumo: 'Tokens gastos com a IA externa (Claude) e o limite mensal.' },
       { id: 'privacidade', rotulo: 'Privacidade', icone: LockKeyhole, perm: 'admin.privacidade', resumo: 'Retenção, anonimização e direitos do titular (LGPD).' },
     ],
   },
@@ -84,6 +86,7 @@ export function Configuracoes() {
         {atual.id === 'auditoria' && <Auditoria />}
         {atual.id === 'dados' && <Dados />}
         {atual.id === 'integracao' && <Integracao />}
+        {atual.id === 'ia' && <ConsumoIa />}
         {atual.id === 'privacidade' && <Privacidade />}
       </div>
     </div>
@@ -228,11 +231,118 @@ function Leitura() {
           <span><strong>{r}</strong><small>{d}</small></span>
         </label>
       ))}
+      <button type="button" className="botao sec" onClick={abrirPainelAcessibilidade}>Mais opções: leitura em voz alta, Libras, ditado e comandos de voz</button>
     </div>
   );
 }
 
 // ------------------------------------------------------------------ Prefeitura
+// ------------------------------------------------------------------ consumo da IA
+interface SomaIa { chamadas: number; falhas: number; entrada: number; saida: number; cacheLeitura: number; cacheEscrita: number; total: number }
+interface ResumoIa {
+  provedor: 'local' | 'claude'; modelo: string; mes: string; limite: number; usado: number; atingido: boolean;
+  doMes: SomaIa; porOperacao: Array<SomaIa & { operacao: string; rotulo: string }>; meses: Array<SomaIa & { mes: string }>;
+  ultimas: Array<{ criadoEm: string; operacao: string; modelo: string; entrada: number; saida: number; cacheLeitura: number; cacheEscrita: number; ok: boolean; erro: string | null; demandaId: number | null }>;
+}
+const num = (n: number) => n.toLocaleString('pt-BR');
+const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const nomeMes = (m: string) => `${MESES[Number(m.slice(5, 7)) - 1] ?? m.slice(5, 7)}/${m.slice(0, 4)}`;
+const SUGESTOES_LIMITE = [0, 500_000, 2_000_000, 10_000_000];
+
+function ConsumoIa() {
+  const { dados, erro, recarregar } = useDados<ResumoIa>('/admin/ia');
+  const [limite, setLimite] = useState('');
+  const [msg, setMsg] = useState<Msg>(null);
+  useEffect(() => { if (dados) setLimite(String(dados.limite)); }, [dados]);
+  if (erro) return <Aviso tipo="erro">{erro}</Aviso>;
+  if (!dados) return <Carregando />;
+  const pct = dados.limite > 0 ? Math.min(100, Math.round((dados.usado / dados.limite) * 100)) : 0;
+  const maiorMes = Math.max(1, ...dados.meses.map((m) => m.total));
+  const salvar = async () => {
+    setMsg(null);
+    const n = Number(limite.replace(/\D/g, '') || 0);
+    try {
+      await api('PUT', '/admin/ia', { limiteTokensMes: n });
+      setMsg({ t: 'ok', m: n ? `Limite salvo: ${num(n)} tokens por mês.` : 'Sem limite mensal.' });
+      recarregar();
+    } catch (e) { setMsg({ t: 'erro', m: (e as Error).message }); }
+  };
+  return (
+    <>
+      <div className="cartao ia-provedor">
+        <span className={`ia-selo ${dados.provedor}`}><Sparkles size={16} aria-hidden="true" /> {dados.provedor === 'claude' ? 'Claude (Anthropic)' : 'IA local'}</span>
+        {dados.provedor === 'claude'
+          ? <p>As sugestões de triagem e as narrativas de relatório usam o modelo <code>{dados.modelo}</code>. Antes do envio, CPF, telefone, e-mail e nome do solicitante são trocados por marcadores. Se a API falhar ou o limite for atingido, a IA local assume sozinha.</p>
+          : <p>A IA roda no próprio servidor: não há custo nem envio de dados. O consumo abaixo só aumenta com <code>IA_PROVEDOR=claude</code> e <code>ANTHROPIC_API_KEY</code> no arquivo <code>.env</code>.</p>}
+      </div>
+
+      <div className="cartao">
+        <h2 className="ia-tit">Este mês ({nomeMes(dados.mes)})</h2>
+        {dados.limite > 0 ? (
+          <div className="ia-medidor" role="meter" aria-valuemin={0} aria-valuemax={dados.limite} aria-valuenow={dados.usado} aria-label="Tokens usados no mês">
+            <div className={`ia-barra${pct >= 100 ? ' cheia' : pct >= 80 ? ' alta' : ''}`} style={{ width: `${Math.max(pct, dados.usado ? 1 : 0)}%` }} />
+            <span>{num(dados.usado)} de {num(dados.limite)} tokens ({pct}%)</span>
+          </div>
+        ) : <p className="sec">{num(dados.usado)} tokens usados. Nenhum limite mensal definido.</p>}
+        {dados.atingido && <Aviso tipo="alerta">O limite do mês foi atingido: até o próximo mês (ou até você ampliar o limite), as sugestões usam a IA local.</Aviso>}
+        {!dados.atingido && pct >= 80 && <Aviso tipo="alerta">Já foram usados {pct}% do limite do mês.</Aviso>}
+        <div className="ia-numeros">
+          <div><strong>{num(dados.doMes.chamadas)}</strong><span>chamadas</span></div>
+          <div><strong>{num(dados.doMes.entrada)}</strong><span>tokens de entrada</span></div>
+          <div><strong>{num(dados.doMes.saida)}</strong><span>tokens de saída</span></div>
+          <div><strong>{num(dados.doMes.cacheLeitura + dados.doMes.cacheEscrita)}</strong><span>tokens de cache</span></div>
+          <div><strong>{num(dados.doMes.falhas)}</strong><span>falhas (IA local assumiu)</span></div>
+        </div>
+        {dados.porOperacao.length > 0 && (
+          <table className="ia-tabela">
+            <thead><tr><th>Uso</th><th>Chamadas</th><th>Entrada</th><th>Saída</th><th>Total</th></tr></thead>
+            <tbody>{dados.porOperacao.map((o) => <tr key={o.operacao}><td>{o.rotulo}</td><td>{num(o.chamadas)}</td><td>{num(o.entrada)}</td><td>{num(o.saida)}</td><td><strong>{num(o.total)}</strong></td></tr>)}</tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="config-duas">
+        <div className="cartao">
+          <h2 className="ia-tit">Limite mensal</h2>
+          <p className="sec">Quando o total do mês chega ao limite, o sistema para de chamar o Claude e usa a IA local até o mês virar. Use 0 para não ter limite.</p>
+          <div className="campo">
+            <label htmlFor="ia-limite">Tokens por mês</label>
+            <input id="ia-limite" inputMode="numeric" value={limite} onChange={(e) => setLimite(e.target.value.replace(/\D/g, ''))} />
+            <div className="ia-sugestoes">{SUGESTOES_LIMITE.map((v) => <button key={v} type="button" className="botao sec" onClick={() => setLimite(String(v))}>{v ? num(v) : 'Sem limite'}</button>)}</div>
+            <div className="ajuda">Para estimar o custo, multiplique os tokens pelo preço do modelo na tabela da Anthropic. A mudança fica na auditoria.</div>
+          </div>
+          {msg && <Aviso tipo={msg.t}>{msg.m}</Aviso>}
+          <button className="botao" onClick={() => void salvar()}>Salvar limite</button>
+        </div>
+        <div className="cartao">
+          <h2 className="ia-tit">Últimos meses</h2>
+          {dados.meses.length === 0 ? <p className="sec">Nenhuma chamada ao Claude registrada ainda.</p> : (
+            <ul className="ia-meses">
+              {dados.meses.map((m) => (
+                <li key={m.mes}><span>{nomeMes(m.mes)}</span><div><i style={{ width: `${Math.round((m.total / maiorMes) * 100)}%` }} /></div><strong>{num(m.total)}</strong></li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="cartao">
+        <h2 className="ia-tit">Últimas chamadas</h2>
+        {dados.ultimas.length === 0 ? <p className="sec">Nenhuma chamada registrada.</p> : (
+          <div className="ia-rolagem">
+            <table className="ia-tabela">
+              <thead><tr><th>Quando</th><th>Uso</th><th>Entrada</th><th>Saída</th><th>Cache</th><th>Resultado</th></tr></thead>
+              <tbody>{dados.ultimas.map((u, i) => (
+                <tr key={i}><td>{fmtData(u.criadoEm)}</td><td>{u.operacao === 'TRIAGEM' ? 'Triagem' : 'Narrativa'}{u.demandaId ? ` · nº ${u.demandaId}` : ''}</td><td>{num(u.entrada)}</td><td>{num(u.saida)}</td><td>{num(u.cacheLeitura + u.cacheEscrita)}</td><td>{u.ok ? 'ok' : <span title={u.erro ?? ''}>falhou, IA local assumiu</span>}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function Orgao() {
   const { recarregarInstalacao } = useEstado();
   const { dados, recarregar } = useDados<Parametros>('/admin/parametros');

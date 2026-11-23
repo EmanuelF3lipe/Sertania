@@ -9,8 +9,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { PRIORIDADES, type Prioridade } from '../../shared/dominio.js';
+import type { UsoTokens } from './uso.js';
 
-const MODELO = 'claude-opus-5-5';
+export const MODELO = 'claude-opus-5-5';
+/** Chamado logo apos cada resposta da API, para registrar os tokens gastos. */
+export type AoUsar = (uso: UsoTokens, modelo: string) => void;
 
 let cliente: Anthropic | null = null;
 function obterCliente(): Anthropic {
@@ -56,6 +59,7 @@ export async function analisarComClaude(
   relato: string,
   catalogo: Array<{ id: number; nome: string; secretaria: string; palavrasChave: string }>,
   prioridadePadrao: Prioridade,
+  aoUsar: AoUsar,
 ): Promise<AnaliseClaude> {
   const lista = catalogo.map((s) => `${s.id} | ${s.nome} | ${s.secretaria} | ${s.palavrasChave}`).join('\n');
   const msg = await obterCliente().beta.messages.create({
@@ -72,13 +76,14 @@ export async function analisarComClaude(
       },
     ],
   });
+  aoUsar(msg.usage, msg.model);
   if (msg.stop_reason === 'refusal') throw new Error('Modelo recusou a análise');
   const analise = esquemaAnalise.parse(JSON.parse(texto(msg)));
   if (!catalogo.some((s) => s.id === analise.servicoId)) throw new Error('Serviço sugerido fora do catálogo');
   return analise;
 }
 
-export async function narrativaComClaude(indicadores: unknown, periodo: string): Promise<string> {
+export async function narrativaComClaude(indicadores: unknown, periodo: string, aoUsar: AoUsar): Promise<string> {
   const msg = await obterCliente().beta.messages.create({
     model: MODELO,
     max_tokens: 4000,
@@ -91,6 +96,7 @@ Escreva em português claro, de 3 a 5 parágrafos curtos: visão geral, prazos, 
 Termine com a frase: "Texto gerado com apoio de IA; requer revisão do gestor responsável."`,
     messages: [{ role: 'user', content: `Período: ${periodo}\nIndicadores agregados (JSON):\n${JSON.stringify(indicadores)}` }],
   });
+  aoUsar(msg.usage, msg.model);
   if (msg.stop_reason === 'refusal') throw new Error('Modelo recusou a narrativa');
   return texto(msg).trim();
 }

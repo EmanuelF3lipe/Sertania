@@ -19,6 +19,7 @@ hr { border: 0; border-top: 1px solid var(--borda); margin: 16px 0; }
 
 /* ---------------------------------------------------------- formularios */
 label { font-weight: 600; font-size: 0.95rem; display: block; margin-bottom: 4px; }
+.rotulo { font-weight: 600; font-size: 0.95rem; display: block; margin-bottom: 4px; }
 .campo { margin-bottom: 14px; }
 .ajuda { font-size: 0.85rem; color: var(--texto-3); font-weight: 400; margin-top: 2px; }
 input, select, textarea {

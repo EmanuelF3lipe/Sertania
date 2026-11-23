@@ -3,7 +3,8 @@ import { agoraIso } from '../db.js';
 import type { Config } from '../config.js';
 import { distanciaMetros, type AnaliseIa, type Prioridade } from '../../shared/dominio.js';
 import { Classificador, jaccard, resumir, sugerirPrioridade } from './local.js';
-import { analisarComClaude, narrativaComClaude } from './claude.js';
+import { analisarComClaude, narrativaComClaude, MODELO } from './claude.js';
+import { limiteAtingido, registrarUso, type OperacaoIa, type UsoTokens } from './uso.js';
 import { pseudonimizar } from '../privacidade.js';
 import { carregar, slaDe, type LinhaDemanda } from '../demandas.js';
 
@@ -101,6 +102,39 @@ export function gruposRecorrentes(banco: Banco, filtroSql = '1=1', params: Array
 }
 
 // ---------------------------------------------------------------------------
+// Uso da IA externa: limite mensal e registro de tokens de cada chamada
+// ---------------------------------------------------------------------------
+
+let avisouLimite = '';
+function usarClaude(banco: Banco, config: Config): boolean {
+  if (config.iaProvedor !== 'claude') return false;
+  if (!limiteAtingido(banco)) return true;
+  const mes = new Date().toISOString().slice(0, 7);
+  if (avisouLimite !== mes) {
+    avisouLimite = mes;
+    console.warn('[ia] Limite mensal de tokens atingido: usando a IA local até o próximo mês ou até o limite ser ampliado.');
+  }
+  return false;
+}
+
+/** Registra uma chamada: os tokens chegam pelo aoUsar; sucesso ou falha fecham o registro uma unica vez. */
+function registro(banco: Banco, operacao: OperacaoIa, demandaId: number | null) {
+  let uso: UsoTokens | null = null;
+  let modelo = MODELO;
+  let fechado = false;
+  const fechar = (ok: boolean, erro?: string) => {
+    if (fechado) return;
+    fechado = true;
+    try { registrarUso(banco, { operacao, modelo, uso, ok, erro, demandaId }); } catch (e) { console.warn('[ia] não foi possível registrar o uso:', (e as Error).message); }
+  };
+  return {
+    aoUsar: (u: UsoTokens, m: string) => { uso = u; modelo = m || MODELO; },
+    sucesso: () => fechar(true),
+    falha: (e: Error) => fechar(false, e.message),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Analise de uma demanda (gera SUGESTAO pendente de decisao humana)
 // ---------------------------------------------------------------------------
 
@@ -111,10 +145,12 @@ export async function analisarDemanda(banco: Banco, config: Config, id: number):
   const qtdSimilares = similares(banco, d).length;
   let analise: AnaliseIa | null = null;
 
-  if (config.iaProvedor === 'claude') {
+  if (usarClaude(banco, config)) {
+    const reg = registro(banco, 'TRIAGEM', id);
     try {
       const texto = pseudonimizar(`${d.descricao}${d.referencia ? `\nReferência: ${d.referencia}` : ''}`, [d.solicitante_nome]);
-      const r = await analisarComClaude(texto, cat.map((s) => ({ id: s.id, nome: s.nome, secretaria: s.secretaria, palavrasChave: s.palavras_chave })), padrao);
+      const r = await analisarComClaude(texto, cat.map((s) => ({ id: s.id, nome: s.nome, secretaria: s.secretaria, palavrasChave: s.palavras_chave })), padrao, reg.aoUsar);
+      reg.sucesso();
       const ids = [r.servicoId, ...r.alternativas.filter((a) => a !== r.servicoId)].slice(0, 3);
       analise = {
         classificacao: ids.flatMap((sid, i) => {
@@ -127,6 +163,7 @@ export async function analisarDemanda(banco: Banco, config: Config, id: number):
         provedor: 'claude',
       };
     } catch (erro) {
+      reg.falha(erro as Error);
       console.warn('[ia] Claude indisponível, usando IA local:', (erro as Error).message);
     }
   }
@@ -235,11 +272,15 @@ export function narrativaLocal(i: IndicadoresBasicos, periodo: string): string {
   return p.join('\n\n');
 }
 
-export async function gerarNarrativa(config: Config, i: IndicadoresBasicos, periodo: string): Promise<{ texto: string; provedor: string }> {
-  if (config.iaProvedor === 'claude') {
+export async function gerarNarrativa(banco: Banco, config: Config, i: IndicadoresBasicos, periodo: string): Promise<{ texto: string; provedor: string }> {
+  if (usarClaude(banco, config)) {
+    const reg = registro(banco, 'NARRATIVA', null);
     try {
-      return { texto: await narrativaComClaude(i, periodo), provedor: 'claude' };
+      const texto = await narrativaComClaude(i, periodo, reg.aoUsar);
+      reg.sucesso();
+      return { texto, provedor: 'claude' };
     } catch (erro) {
+      reg.falha(erro as Error);
       console.warn('[ia] narrativa via Claude falhou, usando local:', (erro as Error).message);
     }
   }
