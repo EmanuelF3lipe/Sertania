@@ -333,7 +333,7 @@ function ConsumoIa() {
             <table className="ia-tabela">
               <thead><tr><th>Quando</th><th>Uso</th><th>Entrada</th><th>Saída</th><th>Cache</th><th>Resultado</th></tr></thead>
               <tbody>{dados.ultimas.map((u, i) => (
-                <tr key={i}><td>{fmtData(u.criadoEm)}</td><td>{u.operacao === 'TRIAGEM' ? 'Triagem' : 'Narrativa'}{u.demandaId ? ` · nº ${u.demandaId}` : ''}</td><td>{num(u.entrada)}</td><td>{num(u.saida)}</td><td>{num(u.cacheLeitura + u.cacheEscrita)}</td><td>{u.ok ? 'ok' : <span title={u.erro ?? ''}>falhou, IA local assumiu</span>}</td></tr>
+                <tr key={i}><td>{fmtData(u.criadoEm)}</td><td>{u.operacao === 'TRIAGEM' ? 'Triagem' : 'Narrativa'}{u.demandaId ? `, nº ${u.demandaId}` : ''}</td><td>{num(u.entrada)}</td><td>{num(u.saida)}</td><td>{num(u.cacheLeitura + u.cacheEscrita)}</td><td>{u.ok ? 'ok' : <span title={u.erro ?? ''}>falhou, IA local assumiu</span>}</td></tr>
               ))}</tbody>
             </table>
           </div>
@@ -477,7 +477,7 @@ function Equipe() {
           <li key={m.id} className={`cracha${m.ativo ? '' : ' desligado'}`}>
             <div className={`cracha-faixa papel-${m.papel}`}><span>{PAPEL_CURTO[m.papel]}</span></div>
             <span className="avatar">{iniciais(m.nome)}</span>
-            <strong>{m.nome}{m.id === usuario?.id && <span className="mudo"> · você</span>}</strong>
+            <strong>{m.nome}{m.id === usuario?.id && <span className="mudo"> (você)</span>}</strong>
             <span className="pequeno mudo cracha-email">{m.email}</span>
             <span className="pequeno">{[m.secretaria, m.setor].filter(Boolean).join(' › ') || 'Município inteiro'}</span>
             <div className="cracha-selos">

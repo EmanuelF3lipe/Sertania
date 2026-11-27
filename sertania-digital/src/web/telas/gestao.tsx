@@ -5,14 +5,25 @@ import {
 } from '../../shared/dominio';
 import { enviarFormulario, fmtData, get, post, qs } from '../api';
 import { ir, useDados, useEstado, useRota } from '../nucleo';
-import { Aviso, Carregando, EtqPrioridade, EtqStatus, LinhaDoTempo, ListaAnexos, Sla } from '../componentes/comuns';
+import { Aviso, Carregando, EtqPrioridade, EtqStatus, Jornada, LinhaDoTempo, ListaAnexos, Sla } from '../componentes/comuns';
 import { Mapa } from '../componentes/mapa';
+import { Plus, Printer, RefreshCw, SlidersHorizontal, Sparkles } from 'lucide-react';
+
+const PRIORIDADE_NOME: Record<string, string> = { BAIXA: 'baixa', NORMAL: 'normal', ALTA: 'alta', URGENTE: 'urgente' };
+const DECISAO_TEXTO: Record<string, string> = { PENDENTE: 'ainda não decidida', ACEITA: 'aceita', AJUSTADA: 'usada com ajustes', REJEITADA: 'rejeitada' };
+
+const PRINCIPAIS = ['busca', 'secretaria', 'servico', 'status'];
 
 export function FiltrosDemanda({ f, setF, campos }: { f: Record<string, string>; setF: (f: Record<string, string>) => void; campos: string[] }) {
   const { catalogo } = useEstado();
+  const [maisFiltros, setMaisFiltros] = useState(false);
   if (!catalogo) return null;
   const set = (k: string, v: string) => setF({ ...f, [k]: v });
-  const c = (k: string) => campos.includes(k);
+  const extras = campos.filter((k) => !PRINCIPAIS.includes(k));
+  const chaveDe: Record<string, string[]> = { periodo: ['de', 'ate'], secretaria: ['secretariaId'], setor: ['setorId'], servico: ['servicoId'], localidade: ['localidadeId'], prioridade: ['prioridade'], canal: ['canal'] };
+  const extrasAtivos = extras.filter((k) => (chaveDe[k] ?? [k]).some((x) => f[x])).length;
+  const verExtras = maisFiltros || extrasAtivos > 0;
+  const c = (k: string) => campos.includes(k) && (PRINCIPAIS.includes(k) || verExtras);
   return (
     <div className="filtros nao-imprimir">
       {c('busca') && <div><label htmlFor="f-b">Buscar</label><input id="f-b" value={f['busca'] ?? ''} onChange={(e) => set('busca', e.target.value)} placeholder="Protocolo ou texto" /></div>}
@@ -60,7 +71,14 @@ export function FiltrosDemanda({ f, setF, campos }: { f: Record<string, string>;
             <option value="">Todos</option>{Object.entries(CANAL_TEXTO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select></div>
       )}
-      <div><button className="botao sec peq" onClick={() => setF({})}>Limpar filtros</button></div>
+      <div className="filtros-acoes">
+        {extras.length > 0 && extrasAtivos === 0 && (
+          <button type="button" className="botao sec peq" aria-expanded={maisFiltros} onClick={() => setMaisFiltros(!maisFiltros)}>
+            <SlidersHorizontal size={15} aria-hidden="true" /> {maisFiltros ? 'Menos filtros' : 'Mais filtros'}
+          </button>
+        )}
+        {Object.values(f).some(Boolean) && <button type="button" className="botao sec peq" onClick={() => setF({})}>Limpar filtros</button>}
+      </div>
     </div>
   );
 }
@@ -83,11 +101,11 @@ export function Fila() {
   return (
     <>
       <div className="linha entre">
-        <h1>Fila de atendimento</h1>
+        <h1>Fila de solicitações</h1>
         <div className="linha nao-imprimir">
-          {pode('demanda.registrar_assistido') && <a className="botao" href="#/gestao/assistido">+ Atendimento assistido</a>}
+          {pode('demanda.registrar_assistido') && <a className="botao" href="#/gestao/assistido"><Plus size={16} aria-hidden="true" /> Registrar no balcão</a>}
           <a className="botao sec" href={`/api/gestao/exportar${qs({ ...f, formato: 'csv' })}`}>Exportar CSV</a>
-          <button className="botao sec" onClick={recarregar}>↻ Atualizar</button>
+          <button className="botao sec" onClick={recarregar}><RefreshCw size={16} aria-hidden="true" /> Atualizar</button>
         </div>
       </div>
       <div className="abas" role="tablist">
@@ -98,27 +116,27 @@ export function Fila() {
       {carregando && !dados && <Carregando />}
       {dados && (
         <div className="cartao rolagem-x">
-          <p className="pequeno mudo">{dados.total} solicitação(ões)</p>
+          <p className="pequeno mudo">{dados.total === 1 ? '1 solicitação' : `${dados.total} solicitações`}</p>
           <table>
             <thead><tr><th>Protocolo</th><th>Serviço / local</th><th>Situação</th><th>Prioridade</th><th>Prazo</th><th>Responsável</th></tr></thead>
             <tbody>
               {dados.itens.map((d) => (
                 <tr key={d.id} className="clicavel" tabIndex={0} onClick={() => ir(`/gestao/demanda/${d.id}`)} onKeyDown={(e) => e.key === 'Enter' && ir(`/gestao/demanda/${d.id}`)}>
-                  <td><strong>{d.protocolo}</strong><div className="pequeno mudo">{fmtData(d.criadaEm)} · {CANAL_TEXTO[d.canal]}</div></td>
-                  <td>{d.servico}{d.recorrente && <span className="etq" style={{ marginLeft: 6 }} title="Há registros semelhantes no mesmo local">↻ recorrente</span>}<div className="pequeno mudo">{d.setor} · {d.localidade ?? 'sem localidade'}</div></td>
+                  <td><strong className="protocolo-linha">{d.protocolo}</strong><div className="pequeno mudo">{fmtData(d.criadaEm)}, {CANAL_TEXTO[d.canal]}</div></td>
+                  <td>{d.servico}{d.recorrente && <span className="etq" style={{ marginLeft: 6 }} title="Há registros semelhantes no mesmo local">↻ recorrente</span>}<div className="pequeno mudo">{d.setor}, {d.localidade ?? 'sem localidade'}</div></td>
                   <td><EtqStatus status={d.status} /></td>
                   <td><EtqPrioridade p={d.prioridade} /></td>
                   <td style={{ minWidth: 120 }}><Sla sla={d.sla} compacto /></td>
-                  <td className="pequeno">{d.responsavel ?? <span className="mudo">—</span>}</td>
+                  <td className="pequeno">{d.responsavel ?? <span className="mudo">Ninguém ainda</span>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {dados.total > dados.limite && (
             <div className="linha" style={{ marginTop: 12 }}>
-              <button className="botao sec peq" disabled={pagina === 1} onClick={() => setPagina(pagina - 1)}>← Anterior</button>
+              <button className="botao sec peq" disabled={pagina === 1} onClick={() => setPagina(pagina - 1)}>Anterior</button>
               <span className="pequeno">Página {pagina} de {Math.ceil(dados.total / dados.limite)}</span>
-              <button className="botao sec peq" disabled={pagina * dados.limite >= dados.total} onClick={() => setPagina(pagina + 1)}>Próxima →</button>
+              <button className="botao sec peq" disabled={pagina * dados.limite >= dados.total} onClick={() => setPagina(pagina + 1)}>Próxima</button>
             </div>
           )}
         </div>
@@ -190,23 +208,24 @@ export function DetalheDemanda() {
 
   return (
     <>
-      <p className="nao-imprimir"><a href="#/gestao/fila">← Voltar à fila</a></p>
+      <p className="nao-imprimir"><a href="#/gestao/fila">Voltar à fila</a></p>
       <div className="linha entre">
         <div>
           <h1 style={{ marginBottom: 4 }}>{d.protocolo}</h1>
-          <div className="linha"><EtqStatus status={d.status} /><EtqPrioridade p={d.prioridade} />{d.recorrente && <span className="etq">↻ recorrente</span>}<span className="pequeno mudo">Ciclo {d.ciclo} · {CANAL_TEXTO[d.canal]} · aberta em {fmtData(d.criadaEm)}</span></div>
+          <div className="linha"><EtqStatus status={d.status} /><EtqPrioridade p={d.prioridade} />{d.recorrente && <span className="etq">↻ recorrente</span>}<span className="pequeno mudo">Ciclo {d.ciclo}, {CANAL_TEXTO[d.canal]}, aberta em {fmtData(d.criadaEm)}</span></div>
         </div>
-        <button className="botao sec nao-imprimir" onClick={() => window.print()}>🖨 Imprimir</button>
+        <button className="botao sec nao-imprimir" onClick={() => window.print()}><Printer size={16} aria-hidden="true" /> Imprimir</button>
       </div>
+      <Jornada status={d.status} />
       {msg && <Aviso tipo={msg.tipo}>{msg.t}</Aviso>}
 
       <div className="grade g2" style={{ marginTop: 16, alignItems: 'start' }}>
         <div className="coluna">
           <div className="cartao">
             <h2>{d.servico}</h2>
-            <p className="pequeno sec">{d.secretaria} · {d.setor}</p>
+            <p className="pequeno sec">{d.secretaria}, {d.setor}</p>
             <p style={{ whiteSpace: 'pre-wrap' }}>{d.descricao}</p>
-            <p className="pequeno"><strong>Local:</strong> {[d.localidade, d.endereco, d.referencia].filter(Boolean).join(' · ') || '—'}</p>
+            <p className="pequeno"><strong>Local:</strong> {[d.localidade, d.endereco, d.referencia].filter(Boolean).join(', ') || 'não informado'}</p>
             <Sla sla={d.sla} />
             {d.agendadaPara && <p className="pequeno">Agendada para <strong>{fmtData(d.agendadaPara, false)}</strong></p>}
             {d.resultado && <p className="pequeno">Resultado: <strong>{RESULTADO_TEXTO[d.resultado]}</strong></p>}
@@ -237,14 +256,14 @@ export function DetalheDemanda() {
         <div className="coluna">
           {pode('ia.usar') && (
             <div className="cartao" style={{ borderColor: 'var(--info)' }}>
-              <div className="linha entre"><h3>🤖 Apoio da IA</h3><button className="botao sec peq" disabled={analisando} onClick={() => { setAnalisando(true); void post(`/gestao/demandas/${d.id}/analisar`).finally(() => { setAnalisando(false); recarregar(); }); }}>{analisando ? 'Analisando…' : d.sugestaoIa ? 'Reanalisar' : 'Analisar'}</button></div>
+              <div className="linha entre"><h3 className="titulo-icone"><Sparkles size={18} aria-hidden="true" /> Apoio da IA</h3><button className="botao sec peq" disabled={analisando} onClick={() => { setAnalisando(true); void post(`/gestao/demandas/${d.id}/analisar`).finally(() => { setAnalisando(false); recarregar(); }); }}>{analisando ? 'Analisando…' : d.sugestaoIa ? 'Reanalisar' : 'Analisar'}</button></div>
               {!d.sugestaoIa && <p className="mudo pequeno">Nenhuma sugestão ainda.</p>}
               {d.sugestaoIa && (
                 <>
                   <p className="pequeno"><strong>Resumo:</strong> {d.sugestaoIa.resumo}</p>
                   <p className="pequeno"><strong>Serviço sugerido:</strong></p>
-                  <ol className="pequeno">{d.sugestaoIa.classificacao.map((c) => <li key={c.servicoId}>{c.servico} <span className="mudo">({c.secretaria}) – confiança {Math.round(c.confianca * 100)}%</span>{c.servicoId === d.servicoId ? ' ✓ atual' : ''}</li>)}</ol>
-                  <p className="pequeno"><strong>Prioridade sugerida:</strong> {d.sugestaoIa.prioridade} <span className="mudo">– {d.sugestaoIa.motivoPrioridade}</span></p>
+                  <ol className="pequeno">{d.sugestaoIa.classificacao.map((c) => <li key={c.servicoId}>{c.servico} <span className="mudo">({c.secretaria}) – confiança {Math.round(c.confianca * 100)}%</span>{c.servicoId === d.servicoId ? <strong> (serviço atual)</strong> : ''}</li>)}</ol>
+                  <p className="pequeno"><strong>Prioridade sugerida:</strong> {PRIORIDADE_NOME[d.sugestaoIa.prioridade]} <span className="mudo">– {d.sugestaoIa.motivoPrioridade}</span></p>
                   <p className="ajuda">Gerado por IA {d.sugestaoIa.provedor === 'claude' ? '(Claude, texto sem dados pessoais)' : '(local, sem envio externo)'} em {fmtData(d.sugestaoIa.criadoEm)}. É apenas sugestão: confira antes de usar.</p>
                   {d.sugestaoIa.status === 'PENDENTE' && pode('ia.decidir') ? (
                     <div className="linha">
@@ -252,7 +271,7 @@ export function DetalheDemanda() {
                       <button className="botao sec peq" onClick={() => void decidirIa('AJUSTADA')}>Usar com ajustes</button>
                       <button className="botao sec peq" onClick={() => void decidirIa('REJEITADA')}>Rejeitar</button>
                     </div>
-                  ) : <p className="pequeno">Decisão humana: <strong>{d.sugestaoIa.status}</strong></p>}
+                  ) : <p className="pequeno">Decisão da equipe: <strong>{DECISAO_TEXTO[d.sugestaoIa.status] ?? d.sugestaoIa.status}</strong></p>}
                 </>
               )}
             </div>
@@ -319,7 +338,7 @@ export function DetalheDemanda() {
           {d.notificacoes.length > 0 && (
             <details className="cartao pequeno">
               <summary>Avisos enviados ao cidadão ({d.notificacoes.length})</summary>
-              <ul>{d.notificacoes.map((n, i) => <li key={i}>{fmtData(n.criadoEm)} · {n.canal} {n.destino}: {n.mensagem}</li>)}</ul>
+              <ul>{d.notificacoes.map((n, i) => <li key={i}>{fmtData(n.criadoEm)}, {n.canal} {n.destino}: {n.mensagem}</li>)}</ul>
             </details>
           )}
         </div>

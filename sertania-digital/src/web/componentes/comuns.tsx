@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { FileText, Paperclip } from 'lucide-react';
 import { STATUS_TEXTO, type EventoDto, type Prioridade, type SlaDto, type Status, type AnexoDto } from '../../shared/dominio';
 import { fmtData } from '../api';
 
@@ -77,9 +78,9 @@ export function ListaAnexos({ anexos, baixavel }: { anexos: AnexoDto[]; baixavel
               <img src={`/api/gestao/anexos/${a.id}`} alt={a.nome} loading="lazy" />
             </a>
           ) : baixavel ? (
-            <a href={`/api/gestao/anexos/${a.id}`} target="_blank" rel="noreferrer">📄 {a.nome}</a>
+            <a href={`/api/gestao/anexos/${a.id}`} target="_blank" rel="noreferrer" className="anexo-nome"><FileText size={16} aria-hidden="true" /> {a.nome}</a>
           ) : (
-            <span>📎 {a.nome}</span>
+            <span className="anexo-nome"><Paperclip size={16} aria-hidden="true" /> {a.nome}</span>
           )}
           {a.origem === 'INTERNO' && <figcaption className="mudo">interno</figcaption>}
         </figure>
@@ -95,7 +96,7 @@ export function LinhaDoTempo({ eventos, baixavel }: { eventos: EventoDto[]; baix
         <li key={e.id}>
           <div className="linha pequeno">
             <strong>{e.paraStatus && e.deStatus !== e.paraStatus ? STATUS_TEXTO[e.paraStatus] : rotuloEvento(e.tipo)}</strong>
-            <span className="mudo">· {fmtData(e.criadoEm)} · {e.autor}</span>
+            <span className="mudo">{fmtData(e.criadoEm)}, por {e.autor}</span>
           </div>
           {e.textoPublico && <div>{e.textoPublico}</div>}
           {e.notaInterna && <div className="interno"><strong>Nota interna:</strong> {e.notaInterna}</div>}
@@ -130,4 +131,35 @@ export function Copiar({ texto, rotulo = 'Copiar' }: { texto: string; rotulo?: s
 
 export function Estrelas({ nota }: { nota: number }) {
   return <span aria-label={`${nota} de 5`}>{'★'.repeat(nota)}<span className="mudo">{'★'.repeat(5 - nota)}</span></span>;
+}
+
+const ETAPAS = ['Recebida', 'Com o setor responsável', 'Em execução', 'Concluída'] as const;
+const ETAPA_DO_STATUS: Record<Status, number> = {
+  RECEBIDA: 0, ENCAMINHADA: 1, AGUARDANDO_CIDADAO: 1, AGENDADA: 2, EM_EXECUCAO: 2, IMPEDIDA: 2, CONCLUIDA: 3, CANCELADA: -1,
+};
+const NOTA_DO_STATUS: Partial<Record<Status, string>> = {
+  AGUARDANDO_CIDADAO: 'esperando uma resposta sua',
+  AGENDADA: 'atendimento agendado',
+  IMPEDIDA: 'parada por um impedimento',
+};
+
+/** Onde o pedido esta, em 4 etapas. Para o cidadao entender sem conhecer os nomes internos de situacao. */
+export function Jornada({ status }: { status: Status }) {
+  const atual = ETAPA_DO_STATUS[status];
+  if (atual < 0) return null;
+  return (
+    <ol className="jornada" aria-label="Andamento">
+      {ETAPAS.map((e, i) => {
+        const estado = i < atual ? 'feita' : i === atual ? 'atual' : 'futura';
+        return (
+          <li key={e} className={estado} aria-current={i === atual ? 'step' : undefined}>
+            <span className="jo-marca" aria-hidden="true">{i < atual || (i === atual && status === 'CONCLUIDA') ? '✓' : i + 1}</span>
+            <span className="jo-nome">{e}</span>
+            {i === atual && NOTA_DO_STATUS[status] && <span className="jo-nota">{NOTA_DO_STATUS[status]}</span>}
+            <span className="so-leitor">{estado === 'feita' ? ' (concluída)' : estado === 'atual' ? ' (etapa atual)' : ' (ainda não)'}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }

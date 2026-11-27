@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, CircleCheck, FileText, MapPin, Printer } from 'lucide-react';
 import { BotaoDitado } from '../acessibilidade/painel';
+import { IconeServico } from '../componentes/icone-servico';
+
+const PASSOS = ['O quê', 'Tipo', 'Onde', 'Fotos', 'Revisão'];
 import { CANAIS, CANAL_TEXTO, type Canal, type SugestaoClassificacao } from '../../shared/dominio';
 import { comprimirImagem, enviarFormulario, post, ErroApi } from '../api';
 import { ir, useEstado, useOnline, useRota } from '../nucleo';
@@ -114,16 +118,19 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
       <p className="sec">
         {assistido ? 'Registre o pedido de quem procurou a prefeitura pessoalmente, por telefone, WhatsApp ou ouvidoria.' : 'Leva cerca de 2 minutos. Você recebe um número de protocolo para acompanhar.'}
       </p>
-      <ol className="passos" aria-hidden="true">
-        {[1, 2, 3, 4, 5].map((n) => <li key={n} className={n <= passo ? 'feito' : ''} />)}
+      <ol className="passos-nomeados" aria-label={`Passo ${passo} de 5`}>
+        {PASSOS.map((nome, i) => (
+          <li key={nome} className={i + 1 < passo ? 'feito' : i + 1 === passo ? 'atual' : ''} aria-current={i + 1 === passo ? 'step' : undefined}>
+            <span aria-hidden="true">{i + 1 < passo ? <Check size={14} strokeWidth={3} /> : i + 1}</span>{nome}
+          </li>
+        ))}
       </ol>
-      <p className="passos-texto">Passo {passo} de 5</p>
       {!online && <Aviso tipo="alerta">Você está sem internet. Pode preencher normalmente: guardamos no aparelho e enviamos quando o sinal voltar.</Aviso>}
 
       <div className="cartao" ref={refCartao}>
         {passo === 1 && (
           <>
-            <h2>1. O que está acontecendo?</h2>
+            <h2>O que está acontecendo?</h2>
             {assistido && (
               <div className="campo">
                 <label htmlFor="canal">Canal do atendimento</label>
@@ -143,41 +150,48 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
 
         {passo === 2 && (
           <>
-            <h2>2. Qual é o tipo de serviço?</h2>
+            <h2>Qual é o tipo de serviço?</h2>
             {sugestoes.length > 0 && (
               <div className="campo">
-                <span className="rotulo" id="sug-rotulo">Sugestões pelo que você escreveu</span>
-                <div className="coluna" role="group" aria-labelledby="sug-rotulo">
+                <span className="rotulo" id="sug-rotulo">Pelo que você escreveu, deve ser um destes</span>
+                <div className="lista-opcoes" role="group" aria-labelledby="sug-rotulo">
                   {sugestoes.map((s) => (
-                    <button key={s.servicoId} type="button" className={`botao ${servicoId === s.servicoId ? '' : 'sec'}`} style={{ justifyContent: 'flex-start' }} onClick={() => setServicoId(s.servicoId)} aria-pressed={servicoId === s.servicoId}>
-                      {servicoId === s.servicoId ? '✓ ' : ''}{s.servico} <span className="pequeno" style={{ fontWeight: 400 }}>– {s.secretaria}</span>
+                    <button key={s.servicoId} type="button" className="opcao-srv" onClick={() => setServicoId(s.servicoId)} aria-pressed={servicoId === s.servicoId}>
+                      <span className="os-icone"><IconeServico nome={s.servico} /></span>
+                      <span className="os-texto"><strong>{s.servico}</strong><small>{s.secretaria}</small></span>
+                      {servicoId === s.servicoId && <Check size={20} strokeWidth={3} aria-hidden="true" className="os-marca" />}
                     </button>
                   ))}
                 </div>
-                <div className="ajuda">Sugestão automática. Confira e escolha a opção certa — a equipe da prefeitura também revisa.</div>
+                <div className="ajuda">Sugestão automática: confira antes de seguir. A equipe da Prefeitura também revisa.</div>
               </div>
             )}
             <div className="campo">
-              <label htmlFor="sec">Ou procure por secretaria</label>
+              <label htmlFor="sec">{sugestoes.length ? 'Não é nenhum desses? Procure por secretaria' : 'Filtrar por secretaria'}</label>
               <select id="sec" value={secretariaFiltro ?? ''} onChange={(e) => setSecretariaFiltro(e.target.value ? Number(e.target.value) : null)}>
                 <option value="">Todas as secretarias</option>
                 {catalogo.secretarias.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
               </select>
             </div>
             <div className="campo">
-              <label htmlFor="srv">Serviço</label>
-              <select id="srv" value={servicoId ?? ''} onChange={(e) => setServicoId(e.target.value ? Number(e.target.value) : null)}>
-                <option value="">Escolha…</option>
-                {servicosVisiveis.map((s) => <option key={s.id} value={s.id}>{s.nome} — {secretaria(s.secretariaId)}</option>)}
-              </select>
-              {servico && <div className="ajuda">{servico.descricao} Prazo de referência: {servico.prazoDiasUteis} dia(s) útil(eis).</div>}
+              <fieldset className="lista-opcoes">
+                <legend className="rotulo">Serviço</legend>
+                {servicosVisiveis.map((s) => (
+                  <label key={s.id} className="opcao-srv">
+                    <input type="radio" name="servico" value={s.id} checked={servicoId === s.id} onChange={() => setServicoId(s.id)} />
+                    <span className="os-icone"><IconeServico nome={s.nome} /></span>
+                    <span className="os-texto"><strong>{s.nome}</strong><small>{secretaria(s.secretariaId)}, até {s.prazoDiasUteis} dia{s.prazoDiasUteis > 1 ? 's' : ''} úte{s.prazoDiasUteis > 1 ? 'is' : 'il'}</small></span>
+                  </label>
+                ))}
+              </fieldset>
+              {servico && <div className="ajuda">{servico.descricao}</div>}
             </div>
           </>
         )}
 
         {passo === 3 && (
           <>
-            <h2>3. Onde é?</h2>
+            <h2>Onde é?</h2>
             <div className="campo">
               <label htmlFor="loc">Localidade</label>
               <select id="loc" value={localidadeId ?? ''} onChange={(e) => setLocalidadeId(e.target.value ? Number(e.target.value) : null)}>
@@ -190,7 +204,7 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
               </select>
             </div>
             <div className="linha campo">
-              <button type="button" className="botao sec" onClick={usarGps}>📍 Usar minha localização</button>
+              <button type="button" className="botao sec" onClick={usarGps}><MapPin size={18} aria-hidden="true" /> Usar minha localização</button>
               {ponto && <button type="button" className="botao sec peq" onClick={() => setPonto(null)}>Remover ponto</button>}
             </div>
             {gps && <p className="pequeno sec">{gps}</p>}
@@ -219,7 +233,7 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
 
         {passo === 4 && (
           <>
-            <h2>4. Fotos ou documentos (opcional)</h2>
+            <h2>Fotos ou documentos <span className="opcional">(opcional)</span></h2>
             <p className="sec">Uma foto ajuda a equipe a entender o problema. Até 5 arquivos (foto ou PDF).</p>
             <label htmlFor="arquivos" className="so-leitor">Escolher fotos ou documentos</label>
             <input
@@ -238,7 +252,7 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
             <div className="miniaturas" style={{ marginTop: 10 }}>
               {arquivos.map((a, i) => (
                 <figure key={i}>
-                  {a.type.startsWith('image/') ? <img src={URL.createObjectURL(a)} alt={a.name} /> : <span>📄</span>}
+                  {a.type.startsWith('image/') ? <img src={URL.createObjectURL(a)} alt={a.name} /> : <FileText size={40} strokeWidth={1.5} aria-label={a.name} />}
                   <figcaption>{(a.size / 1024).toFixed(0)} KB <button type="button" className="botao sec peq" onClick={() => setArquivos(arquivos.filter((_, j) => j !== i))} aria-label={`Remover ${a.name}`}>✕</button></figcaption>
                 </figure>
               ))}
@@ -248,7 +262,7 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
 
         {passo === 5 && (
           <>
-            <h2>5. Seus dados e revisão</h2>
+            <h2>Seus dados e revisão</h2>
             <label className="check campo">
               <input type="checkbox" checked={anonima} onChange={(e) => setAnonima(e.target.checked)} />
               <span>Registrar de forma <strong>anônima</strong>. {assistido ? '' : 'Você ainda acompanha pelo protocolo e código, mas não recebe avisos.'}</span>
@@ -288,9 +302,9 @@ export function NovaDemanda({ assistido = false }: { assistido?: boolean }) {
 
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
         <div className="linha entre" style={{ marginTop: 16 }}>
-          {passo > 1 ? <button type="button" className="botao sec" onClick={() => setPasso(passo - 1)}>← Voltar</button> : <span />}
+          {passo > 1 ? <button type="button" className="botao sec" onClick={() => setPasso(passo - 1)}>Voltar</button> : <span />}
           {passo < 5 ? (
-            <button type="button" className="botao" onClick={avancar}>Continuar →</button>
+            <button type="button" className="botao" onClick={avancar}>Continuar</button>
           ) : (
             <button type="button" className="botao" disabled={enviando} onClick={() => void enviar()}>{enviando ? 'Enviando…' : online ? 'Enviar solicitação' : 'Guardar e enviar depois'}</button>
           )}
@@ -313,7 +327,7 @@ function TelaComprovante({ c, assistido }: { c: Comprovante; assistido: boolean 
   const texto = `Prefeitura de Sertânia – Protocolo ${c.protocolo} – Código de acesso ${c.codigo}`;
   return (
     <div className="estreito cartao">
-      <h1>✓ Solicitação registrada</h1>
+      <h1 className="titulo-ok"><CircleCheck size={30} aria-hidden="true" /> Solicitação registrada</h1>
       <p>{assistido ? 'Entregue estes dados ao cidadão (impresso ou por mensagem).' : 'Guarde estes dados. Com eles você acompanha o andamento, responde perguntas da equipe e avalia o atendimento.'}</p>
       <div className="grade g2" style={{ margin: '16px 0' }}>
         <div><div className="mudo pequeno">Protocolo</div><div className="protocolo">{c.protocolo}</div></div>
@@ -321,7 +335,7 @@ function TelaComprovante({ c, assistido }: { c: Comprovante; assistido: boolean 
       </div>
       <Aviso>O código de acesso não pode ser recuperado. Anote, tire um print ou imprima.</Aviso>
       <div className="linha nao-imprimir">
-        <button className="botao" onClick={() => window.print()}>🖨 Imprimir comprovante</button>
+        <button className="botao" onClick={() => window.print()}><Printer size={18} aria-hidden="true" /> Imprimir comprovante</button>
         <Copiar texto={texto} rotulo="Copiar dados" />
         {'share' in navigator && <button className="botao sec" onClick={() => void navigator.share({ title: 'Protocolo Sertânia', text: texto })}>Compartilhar</button>}
         <button className="botao sec" onClick={() => ir(assistido ? '/gestao/fila' : `/acompanhar?protocolo=${c.protocolo}`)}>{assistido ? 'Ir para a fila' : 'Acompanhar agora'}</button>

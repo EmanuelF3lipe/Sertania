@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowRight, Pin, PinOff, Sunrise } from 'lucide-react';
+import { Pin, PinOff, Sunrise } from 'lucide-react';
 import type { DemandaResumo } from '../../shared/dominio';
 import { qs } from '../api';
 import { useDados, useEstado } from '../nucleo';
@@ -81,7 +81,7 @@ export function InicioEquipe() {
       <div className="dia-colunas">
         {verFila && (
           <section className="cartao bloco-frente">
-            <div className="linha entre"><h2>Na frente da fila</h2><a href="#/gestao/fila" className="pequeno">Fila completa <ArrowRight size={14} aria-hidden="true" /></a></div>
+            <div className="linha entre"><h2>Na frente da fila</h2><a href="#/gestao/fila" className="pequeno">Ver a fila completa</a></div>
             {!frente.dados ? <p className="mudo">Carregando…</p> : frente.dados.itens.length === 0 ? (
               <p className="mudo">Nada em aberto no seu escopo. Bom sinal.</p>
             ) : (
@@ -91,7 +91,7 @@ export function InicioEquipe() {
                     <a href={`#/gestao/demanda/${d.id}`}>
                       <span className="f-cab"><code>{d.protocolo}</code><EtqPrioridade p={d.prioridade} /></span>
                       <strong>{d.servico}</strong>
-                      <span className="pequeno mudo">{d.localidade ?? 'Sem localidade'} · {d.statusTexto}</span>
+                      <span className="pequeno mudo">{d.localidade ?? 'Sem localidade'}, {d.statusTexto}</span>
                       <Sla sla={d.sla} compacto />
                     </a>
                   </li>

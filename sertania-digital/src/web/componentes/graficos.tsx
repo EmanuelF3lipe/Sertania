@@ -123,7 +123,7 @@ function TabelaOculta({ titulo, linhas, cabecalho }: { titulo: string; linhas: s
 
 export function Kpi({ rotulo, valor, detalhe, alerta }: { rotulo: string; valor: string; detalhe?: string; alerta?: boolean }) {
   return (
-    <div className="cartao kpi">
+    <div className="kpi">
       <span className="rot">{rotulo}</span>
       <span className="val" style={alerta ? { color: 'var(--critico)' } : undefined}>{valor}</span>
       {detalhe && <span className="det">{detalhe}</span>}

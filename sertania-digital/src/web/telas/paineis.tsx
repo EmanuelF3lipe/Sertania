@@ -1,3 +1,4 @@
+import { Printer } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { STATUS_TEXTO, type AnaliseIa, type Status } from '../../shared/dominio';
 import { api, fmtData, fmtHoras, fmtNum, post, qs } from '../api';
@@ -28,21 +29,21 @@ export function ConteudoIndicadores({ i }: { i: Indicadores }) {
   return (
     <>
       <h2>Indicadores do desafio</h2>
-      <div className="grade g4" style={{ marginBottom: 16 }}>
+      <div className="faixa-kpi">
         <Kpi rotulo="Demandas com protocolo e histórico" valor={fmtNum(i.rastreabilidadePct, 1, '%')} detalhe={`${i.total} no período`} />
-        <Kpi rotulo="Registro → encaminhamento" valor={fmtHoras(i.tempoEncaminhamentoHoras.mediana)} detalhe={`mediana · média ${fmtHoras(i.tempoEncaminhamentoHoras.media)}`} />
-        <Kpi rotulo="Tempo de atendimento" valor={fmtHoras(i.tempoAtendimentoHoras.mediana)} detalhe={`mediana de ${i.tempoAtendimentoHoras.amostras} concluídas · média ${fmtHoras(i.tempoAtendimentoHoras.media)}`} />
+        <Kpi rotulo="Do registro ao encaminhamento" valor={fmtHoras(i.tempoEncaminhamentoHoras.mediana)} detalhe={`mediana, média ${fmtHoras(i.tempoEncaminhamentoHoras.media)}`} />
+        <Kpi rotulo="Tempo de atendimento" valor={fmtHoras(i.tempoAtendimentoHoras.mediana)} detalhe={`mediana de ${i.tempoAtendimentoHoras.amostras} concluídas, média ${fmtHoras(i.tempoAtendimentoHoras.media)}`} />
         <Kpi rotulo="Concluídas dentro do prazo" valor={fmtNum(i.noPrazoPct, 1, '%')} detalhe={`${i.vencidasAbertas} em aberto com prazo vencido`} alerta={i.vencidasAbertas > 0 && (i.noPrazoPct ?? 100) < 70} />
         <Kpi rotulo="Taxa de recorrência" valor={fmtNum(i.recorrenciaPct, 1, '%')} detalhe={`reabertura: ${fmtNum(i.reaberturaPct, 1, '%')}`} />
-        <Kpi rotulo="Satisfação do cidadão" valor={fmtNum(i.satisfacao.media, 1, ' / 5')} detalhe={`${i.satisfacao.respostas} avaliações · ${fmtNum(i.satisfacao.taxaResposta, 0, '%')} das concluídas`} />
-        <Kpi rotulo="Em aberto" valor={fmtNum(i.abertas, 0)} detalhe={`${i.concluidas} concluídas · ${fmtNum(i.resolvidasPct, 0, '%')} resolvidas`} />
+        <Kpi rotulo="Satisfação do cidadão" valor={fmtNum(i.satisfacao.media, 1, ' / 5')} detalhe={`${i.satisfacao.respostas} avaliações, ${fmtNum(i.satisfacao.taxaResposta, 0, '%')} das concluídas`} />
+        <Kpi rotulo="Em aberto" valor={fmtNum(i.abertas, 0)} detalhe={`${i.concluidas} concluídas, ${fmtNum(i.resolvidasPct, 0, '%')} resolvidas`} />
         <Kpi rotulo="Uso de painéis (30 dias)" valor={fmtNum(i.usoPaineis.reduce((a, b) => a + b.acessos, 0), 0)} detalhe={`${Math.max(0, ...i.usoPaineis.map((u) => u.usuarios))} gestor(es) distintos no painel mais usado`} />
       </div>
       <div className="grade g2">
         <div className="cartao"><h3>Registradas × concluídas por semana</h3><LinhaTempo titulo="Registradas e concluídas por semana" pontos={porSemana(i.serie)} series={[{ chave: 'registradas', nome: 'Registradas', cor: 'var(--serie-1)' }, { chave: 'concluidas', nome: 'Concluídas', cor: 'var(--serie-2)' }]} /></div>
-        <div className="cartao"><h3>Por localidade</h3><BarrasH titulo="Demandas por localidade" itens={i.porLocalidade.map((g) => ({ nome: g.nome, valor: g.total, detalhe: `${g.abertas} em aberto · ${g.vencidas} vencidas` }))} /></div>
+        <div className="cartao"><h3>Por localidade</h3><BarrasH titulo="Demandas por localidade" itens={i.porLocalidade.map((g) => ({ nome: g.nome, valor: g.total, detalhe: `${g.abertas} em aberto, ${g.vencidas} vencidas` }))} /></div>
         <div className="cartao"><h3>Por tipo de serviço</h3><BarrasH titulo="Demandas por serviço" itens={i.porServico.map((g) => ({ nome: g.nome, valor: g.total, detalhe: `${g.abertas} em aberto` }))} /></div>
-        <div className="cartao"><h3>Por secretaria</h3><BarrasH titulo="Demandas por secretaria" itens={i.porSecretaria.map((g) => ({ nome: g.nome, valor: g.total, detalhe: `${g.concluidas} concluídas · ${g.vencidas} vencidas` }))} /></div>
+        <div className="cartao"><h3>Por secretaria</h3><BarrasH titulo="Demandas por secretaria" itens={i.porSecretaria.map((g) => ({ nome: g.nome, valor: g.total, detalhe: `${g.concluidas} concluídas, ${g.vencidas} vencidas` }))} /></div>
         <div className="cartao">
           <h3>Por situação</h3>
           <table><tbody>{i.porStatus.map((g) => <tr key={g.nome}><td><EtqStatus status={g.nome as Status} /></td><td className="num">{g.total}</td></tr>)}</tbody></table>
@@ -75,11 +76,11 @@ export function Painel() {
   return (
     <>
       <div className="linha entre">
-        <h1>Painel gerencial</h1>
+        <h1>Indicadores</h1>
         <div className="linha nao-imprimir">
           <a className="botao sec" href={`/api/gestao/exportar${qs({ ...f, formato: 'csv' })}`}>Exportar CSV</a>
           <a className="botao sec" href={`/api/gestao/exportar${qs({ ...f, formato: 'json' })}`}>Exportar JSON</a>
-          <button className="botao sec" onClick={() => window.print()}>🖨 Imprimir</button>
+          <button className="botao sec" onClick={() => window.print()}><Printer size={16} aria-hidden="true" /> Imprimir</button>
         </div>
       </div>
       <Aviso tipo="alerta">Ambiente de demonstração: os números abaixo vêm de dados fictícios e <strong>não são estimativas oficiais</strong> do Município. A linha de base real é registrada no Diagnóstico.</Aviso>
@@ -99,7 +100,7 @@ export function MapaTela() {
   const { dados, erro } = useDados<{ pontos: PontoApi[]; recorrencias: GrupoRec[] }>(`/gestao/mapa${qs(f)}`);
   const pontos = useMemo<PontoMapa[]>(() => (dados?.pontos ?? []).map((p) => ({
     id: p.id, lat: p.lat, lng: p.lng, cor: COR_STATUS[p.status], raio: p.prioridade === 'URGENTE' || p.prioridade === 'ALTA' ? 8 : 6, tracejado: p.aproximado,
-    rotulo: `${p.protocolo} · ${p.servico} · ${p.statusTexto}${p.aproximado ? ' (posição aproximada pela localidade)' : ''}`, aoClicar: () => ir(`/gestao/demanda/${p.id}`),
+    rotulo: `${p.protocolo}, ${p.servico}, ${p.statusTexto}${p.aproximado ? ' (posição aproximada pela localidade)' : ''}`, aoClicar: () => ir(`/gestao/demanda/${p.id}`),
   })), [dados]);
   const circulos = useMemo<PontoMapa[]>(() => (mostrarRec ? (dados?.recorrencias ?? []) : []).filter((g) => g.lat !== null).map((g) => ({
     id: `r${g.raiz}`, lat: g.lat!, lng: g.lng!, cor: 'var(--critico)', raio: 250 + g.total * 40, rotulo: `Recorrência: ${g.servico}${g.localidade ? ` – ${g.localidade}` : ''} (${g.total} registros)`,
@@ -165,7 +166,7 @@ export function IaAlertas() {
                 <div key={a.id} className="cartao" style={{ borderLeft: `4px solid ${cor[a.severidade]}`, padding: 12 }}>
                   <div className="linha entre"><strong>{a.titulo}</strong><span className="etq">{a.severidade === 'ALTA' ? '⚠ Alta' : a.severidade === 'MEDIA' ? '● Média' : 'Baixa'}</span></div>
                   <p className="pequeno sec" style={{ margin: '4px 0' }}>{a.descricao}</p>
-                  <div className="linha pequeno mudo">{a.secretaria} {a.localidade && `· ${a.localidade}`} · {fmtData(a.atualizado_em)}</div>
+                  <div className="linha pequeno mudo">{[a.secretaria, a.localidade, fmtData(a.atualizado_em)].filter(Boolean).join(', ')}</div>
                   {a.observacao && <p className="pequeno">Obs.: {a.observacao}</p>}
                   <div className="linha" style={{ marginTop: 6 }}>
                     {a.demanda_id && <button className="botao sec peq" onClick={() => ir(`/gestao/demanda/${a.demanda_id}`)}>Abrir {a.protocolo}</button>}
@@ -182,7 +183,7 @@ export function IaAlertas() {
           {!sugestoes.dados ? <Carregando /> : sugestoes.dados.length === 0 ? <p className="mudo">Nenhuma pendente.</p> : (
             <table><tbody>{sugestoes.dados.map((s) => (
               <tr key={s.id} className="clicavel" onClick={() => ir(`/gestao/demanda/${s.demandaId}`)}>
-                <td><strong>{s.protocolo}</strong><div className="pequeno">{s.resumo}</div><div className="pequeno mudo">Sugere: {s.classificacao[0]?.servico ?? '—'} ({Math.round((s.classificacao[0]?.confianca ?? 0) * 100)}%) · {s.prioridade} · {s.provedor}</div></td>
+                <td><strong>{s.protocolo}</strong><div className="pequeno">{s.resumo}</div><div className="pequeno mudo">Sugere: {s.classificacao[0]?.servico ?? '—'} ({Math.round((s.classificacao[0]?.confianca ?? 0) * 100)}%), {s.prioridade}, {s.provedor}</div></td>
               </tr>
             ))}</tbody></table>
           )}
@@ -219,7 +220,7 @@ export function Relatorios() {
       )}
       <div className="cartao">
         <h2>Relatórios gerados</h2>
-        {!lista.dados ? <Carregando /> : (
+        {!lista.dados ? <Carregando /> : lista.dados.length === 0 ? <p className="sec">Nenhum relatório ainda. Escolha o período e os filtros acima e clique em <strong>Gerar relatório com análise</strong>: o primeiro fica pronto em segundos.</p> : (
           <table><thead><tr><th>Título</th><th>Análise</th><th>Autor</th><th>Data</th></tr></thead>
             <tbody>{lista.dados.map((r) => <tr key={r.id} className="clicavel" onClick={() => ir(`/gestao/relatorios/${r.id}`)}><td>{r.titulo}</td><td><span className="etq">{r.narrativaStatus === 'REVISADO' ? '✓ revisada' : 'rascunho IA'}</span></td><td>{r.autor}</td><td className="pequeno">{fmtData(r.criadoEm)}</td></tr>)}</tbody></table>
         )}
@@ -236,9 +237,9 @@ function VerRelatorio({ id }: { id: number }) {
   if (!r) return <Carregando />;
   return (
     <>
-      <p className="nao-imprimir"><a href="#/gestao/relatorios">← Relatórios</a></p>
-      <div className="linha entre"><h1>{r.titulo}</h1><button className="botao sec nao-imprimir" onClick={() => window.print()}>🖨 Imprimir / PDF</button></div>
-      <p className="pequeno sec">Gerado em {fmtData(r.criado_em)} · Período: {r.filtros['de'] ?? 'início'} a {r.filtros['ate'] ?? 'hoje'} · Prefeitura Municipal de Sertânia</p>
+      <p className="nao-imprimir"><a href="#/gestao/relatorios">Voltar aos relatórios</a></p>
+      <div className="linha entre"><h1>{r.titulo}</h1><button className="botao sec nao-imprimir" onClick={() => window.print()}><Printer size={16} aria-hidden="true" /> Imprimir ou salvar em PDF</button></div>
+      <p className="pequeno sec">Gerado em {fmtData(r.criado_em)}. Período: {r.filtros['de'] ?? 'início'} a {r.filtros['ate'] ?? 'hoje'}. Prefeitura Municipal de Sertânia</p>
       <div className="cartao" style={{ marginBottom: 16 }}>
         <div className="linha entre"><h2>Análise</h2><span className="etq">{r.narrativa_status === 'REVISADO' ? '✓ Revisada pelo gestor' : `Rascunho gerado por IA (${r.provedor}) – requer revisão`}</span></div>
         {edicao === null ? (

@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { RESULTADO_TEXTO, type DemandaDetalhe, type DemandaResumo, type UsuarioSessao } from '../../shared/dominio';
 import { enviarFormulario, fmtData, fmtHoras, fmtNum, get, post } from '../api';
 import { ir, useDados, useEstado, useRota } from '../nucleo';
-import { Aviso, Carregando, EtqStatus, LinhaDoTempo, ListaAnexos, Sla } from '../componentes/comuns';
+import { BotaoDitado } from '../acessibilidade/painel';
+import { Printer } from 'lucide-react';
+import { Aviso, Carregando, EtqStatus, Jornada, LinhaDoTempo, ListaAnexos, Sla } from '../componentes/comuns';
 import { BarrasH, Kpi } from '../componentes/graficos';
 
 export function Acompanhar() {
@@ -39,23 +41,39 @@ export function Acompanhar() {
   return (
     <div className="estreito">
       <h1>Acompanhar solicitação</h1>
-      <form className="cartao nao-imprimir" onSubmit={(e) => { e.preventDefault(); void buscar(); }}>
-        <div className="grade g2">
+      {!d && <p className="sec">Veja em que pé está o seu pedido, responda à equipe quando ela perguntar algo e avalie o atendimento no final.</p>}
+      <div className={`acompanhar-busca nao-imprimir${d ? ' compacta' : ''}`}>
+        <form className="cartao" onSubmit={(e) => { e.preventDefault(); void buscar(); }}>
           <div className="campo"><label htmlFor="p">Protocolo</label><input id="p" value={protocolo} onChange={(e) => setProtocolo(e.target.value.toUpperCase())} placeholder="SER-2026-000123" autoComplete="off" /></div>
-          <div className="campo"><label htmlFor="c">Código de acesso</label><input id="c" value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} placeholder="6 letras/números" autoComplete="off" /></div>
-        </div>
-        <button className="botao">Consultar</button>
-        {instalacao?.demonstracao && <p className="ajuda">Demonstração: protocolo <strong>SER-2026-000001</strong> e código <strong>DEMO01</strong>.</p>}
-      </form>
-      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+          <div className="campo"><label htmlFor="c">Código de acesso</label><input id="c" value={codigo} onChange={(e) => setCodigo(e.target.value.toUpperCase())} placeholder="6 letras e números" autoComplete="off" /></div>
+          <button className="botao" disabled={!protocolo.trim() || !codigo.trim()}>Consultar</button>
+          {instalacao?.demonstracao && <p className="ajuda">Demonstração: protocolo <strong>SER-2026-000001</strong> e código <strong>DEMO01</strong>.</p>}
+        </form>
+        {!d && (
+          <figure className="onde-achar" aria-label="Onde achar o protocolo e o código">
+            <div className="mini-comprovante" aria-hidden="true">
+              <span className="mc-titulo">Solicitação registrada</span>
+              <span className="mc-rot">Protocolo</span><span className="mc-protocolo">SER-2026-000123</span>
+              <span className="mc-rot">Código de acesso</span><span className="mc-codigo">K7Q2MX</span>
+            </div>
+            <figcaption>Os dois aparecem no comprovante, logo depois de registrar, e na mensagem que você copiou ou imprimiu. Se perdeu o código, a Prefeitura não consegue recuperá-lo: registre de novo ou procure o atendimento com o protocolo.</figcaption>
+          </figure>
+        )}
+      </div>
+      {erro && <Aviso tipo="erro">{erro} Confira se o protocolo está no formato SER-2026-000123 e se o código tem 6 letras e números, sem espaços.</Aviso>}
       {d && (
         <div className="cartao" style={{ marginTop: 16 }}>
           <div className="linha entre">
             <div><div className="mudo pequeno">Protocolo</div><div className="protocolo">{d.protocolo}</div></div>
             <EtqStatus status={d.status} />
           </div>
-          <p><strong>{d.servico}</strong> · {d.secretaria}<br /><span className="sec">{[d.localidade, d.endereco].filter(Boolean).join(' · ')}</span></p>
-          <p className="sec">{d.descricao}</p>
+          <Jornada status={d.status} />
+          <dl className="ficha">
+            <div><dt>Serviço</dt><dd>{d.servico}</dd></div>
+            <div><dt>Responsável</dt><dd>{d.secretaria}</dd></div>
+            {(d.localidade || d.endereco) && <div><dt>Local</dt><dd>{[d.localidade, d.endereco].filter(Boolean).join(', ')}</dd></div>}
+            <div className="ficha-larga"><dt>O que foi relatado</dt><dd>{d.descricao}</dd></div>
+          </dl>
           <Sla sla={d.sla} />
           {d.agendadaPara && <Aviso>Atendimento previsto para <strong>{fmtData(d.agendadaPara, false)}</strong>.</Aviso>}
           {d.resultado && <Aviso tipo="ok">Resultado: <strong>{RESULTADO_TEXTO[d.resultado]}</strong></Aviso>}
@@ -65,7 +83,8 @@ export function Acompanhar() {
             <div className="cartao" style={{ margin: '16px 0', borderColor: 'var(--aviso)' }}>
               <h3>A equipe precisa de uma informação sua</h3>
               <p>{[...d.eventos].reverse().find((e) => e.paraStatus === 'AGUARDANDO_CIDADAO')?.textoPublico}</p>
-              <textarea value={resposta} onChange={(e) => setResposta(e.target.value)} aria-label="Sua resposta" />
+              <textarea id="resposta" value={resposta} onChange={(e) => setResposta(e.target.value)} aria-label="Sua resposta" />
+              <BotaoDitado campoId="resposta" />
               <input type="file" multiple accept="image/*,application/pdf" onChange={(e) => setArquivos(Array.from(e.target.files ?? []).slice(0, 5))} style={{ marginTop: 8 }} />
               <button className="botao" style={{ marginTop: 8 }} onClick={() => void enviarFormulario<DemandaDetalhe>('/publico/responder', { protocolo, codigo, texto: resposta }, arquivos).then((x) => { setD(x); setResposta(''); setMsg('Resposta enviada. Obrigado!'); }).catch((e: Error) => setErro(e.message))}>Enviar resposta</button>
             </div>
@@ -86,7 +105,7 @@ export function Acompanhar() {
           {msg && <Aviso tipo="ok">{msg}</Aviso>}
           <h3 style={{ marginTop: 16 }}>Histórico</h3>
           <LinhaDoTempo eventos={d.eventos} baixavel={false} />
-          <button className="botao sec nao-imprimir" onClick={() => window.print()}>🖨 Imprimir</button>
+          <button className="botao sec nao-imprimir" onClick={() => window.print()}><Printer size={16} aria-hidden="true" /> Imprimir</button>
         </div>
       )}
     </div>
@@ -103,7 +122,7 @@ export function Transparencia() {
     <>
       <h1>Transparência do atendimento</h1>
       <p className="sec">Números agregados ({dados.periodo}). Nenhum dado pessoal é exibido.</p>
-      <div className="grade g4" style={{ marginBottom: 16 }}>
+      <div className="faixa-kpi">
         <Kpi rotulo="Solicitações registradas" valor={fmtNum(dados.total, 0)} />
         <Kpi rotulo="Concluídas" valor={fmtNum(dados.concluidas, 0)} />
         <Kpi rotulo="Concluídas no prazo" valor={fmtNum(dados.noPrazoPct, 1, '%')} />

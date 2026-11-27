@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Check } from 'lucide-react';
 import { PRIORIDADES, TIPOS_LOCALIDADE, type Catalogo, type Prioridade, type TipoLocalidade } from '../../shared/dominio';
 import { api, fmtData, post } from '../api';
 import { ir, useDados, useEstado } from '../nucleo';
@@ -22,23 +23,32 @@ export function PrimeirosPassos() {
     { feito: diag.dados.length > 0, titulo: 'Registre a linha de base', texto: 'Volume atual, tempos e canais levantados no diagnóstico, com fonte. Isso permite medir a melhoria.', aba: 'diagnostico' },
   ];
   const feitos = passos.filter((p) => p.feito).length;
+  const fechar = () => { setFechado(true); try { localStorage.setItem('primeiros-passos-fechado', '1'); } catch { /* ignora */ } };
   return (
-    <div className="cartao" style={{ marginBottom: 16, borderColor: 'var(--primaria)' }}>
-      <div className="linha entre">
-        <h2 style={{ margin: 0 }}>Primeiros passos da implantação <span className="etq">{feitos} de {passos.length}</span></h2>
-        <button className="botao sec peq" onClick={() => { setFechado(true); try { localStorage.setItem('primeiros-passos-fechado', '1'); } catch { /* ignora */ } }}>Ocultar</button>
+    <section className="cartao roteiro" aria-labelledby="roteiro-titulo">
+      <div className="roteiro-cabeca">
+        <h2 id="roteiro-titulo">Primeiros passos da implantação</h2>
+        <span className="roteiro-conta">{feitos} de {passos.length + 1} feitos</span>
+        <button className="botao sec peq" onClick={fechar}>Ocultar</button>
       </div>
-      <ol className="coluna" style={{ paddingLeft: 20, marginTop: 12 }}>
+      <div className="roteiro-barra" aria-hidden="true"><i style={{ width: `${(feitos / (passos.length + 1)) * 100}%` }} /></div>
+      <ol className="roteiro-lista">
         {passos.map((p) => (
-          <li key={p.titulo}>
-            <strong style={{ textDecoration: p.feito ? 'line-through' : undefined }}>{p.feito ? '✓ ' : ''}{p.titulo}</strong>
-            {!p.feito && <> — <button className="botao sec peq" onClick={() => irPara(p.aba)}>fazer agora</button></>}
-            <div className="pequeno sec">{p.texto}</div>
+          <li key={p.titulo} className={p.feito ? 'feito' : 'pendente'}>
+            <span className="rl-marca" aria-hidden="true">{p.feito ? <Check size={14} strokeWidth={3} /> : null}</span>
+            <div>
+              <strong>{p.titulo}</strong>{p.feito && <span className="so-leitor"> (feito)</span>}
+              {!p.feito && <p>{p.texto}</p>}
+            </div>
+            {!p.feito && <button className="botao peq" onClick={() => irPara(p.aba)}>Fazer agora</button>}
           </li>
         ))}
-        <li><strong>Faça um teste ponta a ponta</strong><div className="pequeno sec">Registre uma solicitação como cidadão em <a href="#/nova">Registrar</a>, encaminhe na <a href="#/gestao/fila">Fila</a>, conclua com a equipe e avalie pelo protocolo. Depois, divulgue o endereço do sistema.</div></li>
+        <li className="pendente">
+          <span className="rl-marca" aria-hidden="true" />
+          <div><strong>Faça um teste ponta a ponta</strong><p>Registre uma solicitação como cidadão em <a href="#/nova">Registrar</a>, encaminhe na <a href="#/gestao/fila">Fila</a>, conclua com a equipe e avalie pelo protocolo. Depois, divulgue o endereço do sistema.</p></div>
+        </li>
       </ol>
-    </div>
+    </section>
   );
 }
 
@@ -120,7 +130,7 @@ export function Localidades() {
       <div className="cartao">
         <h2>Sede, distritos e comunidades</h2>
         <Aviso tipo="alerta">Coordenadas iniciais são aproximadas e as comunidades marcadas “(exemplo)” são fictícias. Substitua pelo cadastro oficial.</Aviso>
-        <table><tbody>{dados.localidades.map((l) => <tr key={l.id}><td>{l.nome}<div className="pequeno mudo">{l.tipo} · {l.lat.toFixed(4)}, {l.lng.toFixed(4)}</div></td><td><button className="botao sec peq" onClick={() => setF({ id: l.id, nome: l.nome, tipo: l.tipo, lat: String(l.lat), lng: String(l.lng) })}>Editar</button></td></tr>)}</tbody></table>
+        <table><tbody>{dados.localidades.map((l) => <tr key={l.id}><td>{l.nome}<div className="pequeno mudo">{l.tipo}, {l.lat.toFixed(4)}, {l.lng.toFixed(4)}</div></td><td><button className="botao sec peq" onClick={() => setF({ id: l.id, nome: l.nome, tipo: l.tipo, lat: String(l.lat), lng: String(l.lng) })}>Editar</button></td></tr>)}</tbody></table>
         <h3 style={{ marginTop: 12 }}>{f.id ? 'Editar' : 'Nova'} localidade</h3>
         <div className="grade g2">
           <input aria-label="Nome" placeholder="Nome" value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} />
@@ -161,7 +171,7 @@ export function Diagnostico() {
         <p className="sec">Registre aqui os dados reais levantados no diagnóstico (item 6 do desafio), com fonte. Um dado só vira referência oficial após validação por outra pessoa.</p>
         {!dados ? <Carregando /> : dados.length === 0 ? <Aviso>Nenhum dado de diagnóstico registrado ainda. Enquanto isso, nenhum número da plataforma deve ser apresentado como estimativa oficial.</Aviso> : (
           <table><thead><tr><th>Indicador</th><th>Valor</th><th>Fonte</th><th></th></tr></thead>
-            <tbody>{dados.map((d) => <tr key={d.id}><td>{d.indicador}<div className="pequeno mudo">{d.periodo}</div></td><td>{d.valor} {d.unidade}</td><td className="pequeno">{d.fonte}<div className="mudo">{d.registrado_por_nome} · {fmtData(d.criado_em, false)}</div></td>
+            <tbody>{dados.map((d) => <tr key={d.id}><td>{d.indicador}<div className="pequeno mudo">{d.periodo}</div></td><td>{d.valor} {d.unidade}</td><td className="pequeno">{d.fonte}<div className="mudo">{d.registrado_por_nome}, {fmtData(d.criado_em, false)}</div></td>
               <td>{d.validado ? <span className="etq">✓ validado</span> : pode('admin.diagnostico') ? <button className="botao sec peq" onClick={() => void post(`/admin/diagnostico/${d.id}/validar`).then(recarregar).catch((e: Error) => setMsg(e.message))}>Validar</button> : <span className="etq">pendente</span>}</td></tr>)}</tbody></table>
         )}
         {msg && <Aviso tipo="erro">{msg}</Aviso>}
@@ -231,7 +241,7 @@ export function Integracao() {
       <div className="cartao">
         <h2>Tokens de integração</h2>
         <p className="sec">Para outros sistemas (ouvidoria, e-SIC, BI, sistemas estaduais) consumirem a API por padrões abertos. Integrações nunca recebem dados pessoais. <a href="#/api">Ver documentação OpenAPI</a>.</p>
-        <table><tbody>{(dados ?? []).map((t) => <tr key={t.id} style={{ opacity: t.revogadoEm ? 0.5 : 1 }}><td>{t.nome}<div className="pequeno mudo">{t.escopos} · último uso {fmtData(t.ultimoUso)}</div></td><td>{!t.revogadoEm ? <button className="botao sec peq" onClick={() => void post(`/admin/tokens/${t.id}/revogar`).then(recarregar)}>Revogar</button> : 'revogado'}</td></tr>)}</tbody></table>
+        <table><tbody>{(dados ?? []).map((t) => <tr key={t.id} style={{ opacity: t.revogadoEm ? 0.5 : 1 }}><td>{t.nome}<div className="pequeno mudo">{t.escopos}, último uso {fmtData(t.ultimoUso)}</div></td><td>{!t.revogadoEm ? <button className="botao sec peq" onClick={() => void post(`/admin/tokens/${t.id}/revogar`).then(recarregar)}>Revogar</button> : 'revogado'}</td></tr>)}</tbody></table>
       </div>
       <div className="cartao">
         <h2>Novo token</h2>
@@ -263,7 +273,7 @@ export function Privacidade() {
       </div>
       <div className="cartao">
         <h2>Situação atual</h2>
-        <p>{dados.comDadosPessoais} solicitações com dados pessoais · {dados.anonimizadas} já anonimizadas · {dados.anonimas} registradas como anônimas.</p>
+        <p>{dados.comDadosPessoais} solicitações com dados pessoais, {dados.anonimizadas} já anonimizadas, {dados.anonimas} registradas como anônimas.</p>
         <button className="botao sec" onClick={() => void post<{ anonimizadas: number }>('/admin/privacidade/anonimizar').then((r) => { setMsg(`${r.anonimizadas} solicitação(ões) anonimizadas.`); recarregar(); })}>Aplicar política de retenção agora</button>
         {msg && <Aviso tipo="ok">{msg}</Aviso>}
       </div>

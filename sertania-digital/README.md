@@ -90,6 +90,13 @@ Rotina: backup automático diário em `dados/backups` (copie a pasta para fora d
   - faixa em zigue-zague de xilogravura;
   - cartões com sombra de carimbo;
   - selo de lotação inclinado, como carimbo de repartição.
+- **Paisagem do portal:** sol, serra e mandacarus em xilogravura no topo da página inicial (`src/web/componentes/xilogravura.tsx`). É o único elemento ilustrado; o resto da interface fica sóbrio.
+- **Regras de interface:**
+  - listas com filetes em vez de grades de cartões;
+  - ícones de traço no lugar de emojis;
+  - texto em frase normal, sem rótulos em maiúsculas nem setas penduradas nos links;
+  - passos numerados só onde há sequência de verdade (registro e andamento do pedido);
+  - mensagens de erro e telas vazias dizem o que fazer.
 
 Os tokens ficam em `src/web/estilos-base.css`.
 
