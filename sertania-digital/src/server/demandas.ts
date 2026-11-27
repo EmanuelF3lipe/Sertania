@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { Banco } from './db.js';
 import { agoraIso } from './db.js';
 import {
-  CANAIS, ESCOPO_PAPEL, PRIORIDADES, REGRAS, RESULTADOS, STATUS_TEXTO, comandosPermitidos, podeTransicionar,
+  CANAIS, PRIORIDADES, REGRAS, RESULTADOS, STATUS_TEXTO, comandosPermitidos, podeTransicionar,
   type AnexoDto, type Canal, type Comando, type DemandaDetalhe, type DemandaResumo, type EventoDto, type Prioridade,
   type Resultado, type Status, type UsuarioSessao,
 } from '../shared/dominio.js';
@@ -66,20 +66,24 @@ export function slaDe(d: LinhaDemanda) {
 // Escopo e visibilidade
 // ---------------------------------------------------------------------------
 
+const lista = (ids: number[]) => (ids.length ? ids : [-1]);
+const marcas = (ids: number[]) => lista(ids).map(() => '?').join(',');
+
+/** Escopo vem do cargo; a pessoa pode estar em varias secretarias ou setores. */
 export function filtroEscopo(u: UsuarioSessao): { sql: string; params: Array<number | null> } {
-  switch (ESCOPO_PAPEL[u.papel]) {
+  switch (u.escopo) {
     case 'PROPRIO': return { sql: 'd.solicitante_id = ?', params: [u.id] };
-    case 'SETOR': return { sql: 'd.setor_id = ?', params: [u.setorId ?? -1] };
-    case 'SECRETARIA': return { sql: 'd.secretaria_id = ?', params: [u.secretariaId ?? -1] };
+    case 'SETOR': return { sql: `d.setor_id IN (${marcas(u.setorIds)})`, params: lista(u.setorIds) };
+    case 'SECRETARIA': return { sql: `d.secretaria_id IN (${marcas(u.secretariaIds)})`, params: lista(u.secretariaIds) };
     default: return { sql: '1 = 1', params: [] };
   }
 }
 
 export function noEscopo(u: UsuarioSessao, d: { setor_id: number; secretaria_id: number; solicitante_id: number | null }): boolean {
-  switch (ESCOPO_PAPEL[u.papel]) {
+  switch (u.escopo) {
     case 'PROPRIO': return d.solicitante_id === u.id;
-    case 'SETOR': return d.setor_id === u.setorId;
-    case 'SECRETARIA': return d.secretaria_id === u.secretariaId;
+    case 'SETOR': return u.setorIds.includes(d.setor_id);
+    case 'SECRETARIA': return u.secretariaIds.includes(d.secretaria_id);
     default: return true;
   }
 }

@@ -3,7 +3,6 @@ import { Accessibility, Hand, Volume2 } from 'lucide-react';
 import { Acessibilidade, abrirPainelAcessibilidade } from './acessibilidade/painel';
 import { falaDisponivel, falar, textoDaPagina } from './acessibilidade/voz';
 import { PaginaAcessibilidade } from './telas/acessibilidade';
-import { PAPEL_TEXTO } from '../shared/dominio';
 import { useDados, useEstado, useOnline, usePreferencias, useRota } from './nucleo';
 import { sincronizar } from './offline';
 import { Aviso, Carregando } from './componentes/comuns';
@@ -73,7 +72,7 @@ function Topo() {
             {usuario && usuario.papel !== 'CIDADAO' && link('/equipe', 'Área da equipe')}
             {link('/transparencia', 'Transparência')}
             {usuario ? (
-              <button className="link" onClick={() => void sair()} title={`${usuario.nome} – ${PAPEL_TEXTO[usuario.papel]}`}>Sair ({usuario.nome.split(' ')[0]})</button>
+              <button className="link" onClick={() => void sair()} title={`${usuario.nome} – ${usuario.cargo}`}>Sair ({usuario.nome.split(' ')[0]})</button>
             ) : (
               link('/entrar', 'Entrar')
             )}
@@ -88,7 +87,7 @@ function Restrito({ permitido, children }: { permitido: boolean; children: React
   const { usuario, carregando } = useEstado();
   if (carregando) return <Carregando />;
   if (!usuario) return <Aviso>Esta área é da equipe da prefeitura. <a href="#/entrar">Entrar</a></Aviso>;
-  if (!permitido) return <Aviso tipo="erro">Seu perfil ({PAPEL_TEXTO[usuario.papel]}) não tem acesso a esta área.</Aviso>;
+  if (!permitido) return <Aviso tipo="erro">Seu cargo ({usuario.cargo}) não tem acesso a esta área.</Aviso>;
   return <>{children}</>;
 }
 

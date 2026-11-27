@@ -54,7 +54,8 @@ it('banco limpo: primeiro administrador, cadastro de servidor e troca obrigatór
   const sec = await req('POST', '/admin/secretarias', { nome: 'Infraestrutura', sigla: 'SEINFRA' }, admin);
   const setor = await req('POST', '/admin/setores', { nome: 'Iluminação', secretariaId: sec.json.id }, admin);
   expect((await req('POST', '/admin/servicos', { nome: 'Poste apagado', setorId: setor.json.id, prazoDiasUteis: 5 }, admin)).status).toBe(201);
-  const novo = await req('POST', '/admin/usuarios', { nome: 'Gestor Iluminação', email: 'gestor@sertania.pe.gov.br', papel: 'GESTOR_SETOR', secretariaId: null, setorId: setor.json.id }, admin);
+  const cargoGestor = ((await req('GET', '/admin/cargos', undefined, admin)).json as any[]).find((c) => c.codigo === 'GESTOR_SETOR');
+  const novo = await req('POST', '/admin/usuarios', { nome: 'Gestor Iluminação', email: 'gestor@sertania.pe.gov.br', cargoId: cargoGestor.id, lotacoes: [{ secretariaId: sec.json.id, setorId: setor.json.id }] }, admin);
   const provisoria = novo.json.senhaProvisoria as string;
   expect(provisoria).toBeTruthy();
 

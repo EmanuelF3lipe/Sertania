@@ -131,8 +131,8 @@ export function rotasGestao(ctx: Ctx): Router {
     const { responsavelId, versao } = validar(z.object({ responsavelId: z.number().int().nullable(), versao: z.number().int() }), req.body);
     if (d.versao !== versao) throw conflito('Esta solicitação foi alterada. Recarregue.');
     if (responsavelId !== null) {
-      const resp = b.get<{ setor_id: number | null; ativo: number; nome: string }>('SELECT setor_id, ativo, nome FROM usuarios WHERE id = ?', responsavelId);
-      if (!resp || !resp.ativo || resp.setor_id !== d.setor_id) throw invalido('O responsável precisa estar ativo e lotado no setor da solicitação');
+      const resp = b.get<{ id: number }>(`SELECT u.id FROM usuarios u JOIN usuario_lotacoes l ON l.usuario_id = u.id AND l.setor_id = ? WHERE u.id = ? AND u.ativo = 1`, d.setor_id, responsavelId);
+      if (!resp) throw invalido('O responsável precisa estar ativo e lotado no setor da solicitação');
     }
     b.run('UPDATE demandas SET responsavel_id = ?, versao = versao + 1 WHERE id = ?', responsavelId, d.id);
     const nome = responsavelId ? b.get<{ nome: string }>('SELECT nome FROM usuarios WHERE id = ?', responsavelId)!.nome : 'ninguém';
@@ -158,7 +158,11 @@ export function rotasGestao(ctx: Ctx): Router {
   r.get('/responsaveis', (req, res) => {
     exigir(req, 'demanda.atribuir');
     const setorId = Number(req.query['setorId']);
-    res.json(b.all("SELECT id, nome, papel FROM usuarios WHERE setor_id = ? AND ativo = 1 AND papel IN ('CAMPO','GESTOR_SETOR','GESTOR_SECRETARIA') ORDER BY nome", setorId));
+    res.json(b.all(`SELECT DISTINCT u.id, u.nome, c.nome AS cargo FROM usuarios u
+       JOIN usuario_lotacoes l ON l.usuario_id = u.id AND l.setor_id = ?
+       JOIN cargos c ON c.id = u.cargo_id
+       WHERE u.ativo = 1 AND u.papel <> 'CIDADAO' AND EXISTS (SELECT 1 FROM json_each(c.permissoes) j WHERE j.value = 'demanda.executar')
+       ORDER BY u.nome`, setorId));
   });
 
   // ------------------------------------------------------------- anexos
@@ -306,13 +310,14 @@ export function rotasGestao(ctx: Ctx): Router {
   r.get('/alertas', (req, res) => {
     const u = exigir(req, 'painel.ver', 'demanda.triagem', 'demanda.executar');
     const status = String(req.query['status'] ?? 'ABERTO');
-    const escopo = u.papel === 'GESTOR_SECRETARIA' || u.papel === 'GESTOR_SETOR' || u.papel === 'CAMPO' ? 'AND (a.secretaria_id = ? OR a.secretaria_id IS NULL)' : '';
+    const minhas = u.secretariaIds.length ? u.secretariaIds : [-1];
+    const escopo = u.escopo === 'MUNICIPIO' ? '' : `AND (a.secretaria_id IN (${minhas.map(() => '?').join(',')}) OR a.secretaria_id IS NULL)`;
     res.json(
       b.all(
         `SELECT a.*, l.nome AS localidade, sc.nome AS secretaria, d.protocolo FROM alertas a
          LEFT JOIN localidades l ON l.id = a.localidade_id LEFT JOIN secretarias sc ON sc.id = a.secretaria_id LEFT JOIN demandas d ON d.id = a.demanda_id
          WHERE a.status = ? ${escopo} ORDER BY CASE a.severidade WHEN 'ALTA' THEN 0 WHEN 'MEDIA' THEN 1 ELSE 2 END, a.atualizado_em DESC LIMIT 300`,
-        status, ...(escopo ? [u.secretariaId] : []),
+        status, ...(escopo ? minhas : []),
       ),
     );
   });

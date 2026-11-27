@@ -40,7 +40,7 @@ npm start
 
 Esse modo serve a API e a interface na porta 3000. Os outros comandos são:
 
-- `npm test`: 35 testes, entre unitários e de ponta a ponta pela API HTTP.
+- `npm test`: 37 testes, entre unitários e de ponta a ponta pela API HTTP.
 - `npm run typecheck`: verificação de tipos.
 - `npm run backup`: backup manual do banco (`npm run backup:prod` no build de produção).
 - `npm run iniciar -- --demonstracao --recriar`: apaga e recria o banco de demonstração.
@@ -65,9 +65,9 @@ A configuração fica em `.env` (veja `.env.example`). Para usar o Claude na tri
    3. localidades (incluir as comunidades rurais) e feriados municipais;
    4. servidores;
    5. linha de base do diagnóstico.
-6. **Servidores.** Em **Configurações › Equipe**, o administrador cadastra cada servidor com perfil e lotação. A senha inicial pode ser digitada ou gerada pelo sistema, e por padrão a pessoa é obrigada a criar a própria senha no primeiro login, antes de ver qualquer dado.
+6. **Servidores.** Em **Configurações › Equipe**, o administrador cadastra cada servidor com cargo e lotação (um ou mais setores ou secretarias). A senha inicial pode ser digitada ou gerada pelo sistema, e por padrão a pessoa é obrigada a criar a própria senha no primeiro login, antes de ver qualquer dado.
    - **Esqueci minha senha:** o servidor pede pela tela de login. O pedido aparece em destaque na lista da equipe, e o administrador gera uma senha provisória com um clique. A tela responde igual para e-mails que existem e que não existem, então não revela quem tem conta.
-   - **Quem pode o quê:** em **Configurações › Quem pode o quê**, o administrador marca, numa matriz, o que cada um dos 6 perfis da equipe pode fazer, entre as 18 permissões agrupadas por módulo. Permissões sensíveis são destacadas, toda mudança vai para a auditoria e o perfil pode voltar ao padrão. O escopo (setor, secretaria ou município) continua definido pelo perfil, e a administração nunca perde o acesso a esta tela.
+   - **Cargos e permissões:** em **Configurações › Cargos e permissões**, a Prefeitura cria, duplica, edita e exclui os próprios cargos. Cada cargo tem nome, descrição, alcance (setor, secretaria ou município todo) e permissões escolhidas por área, com busca e "selecionar todas". Os 6 perfis originais viram cargos iniciais editáveis. Toda mudança vai para a auditoria, um cargo só é excluído quando ninguém o ocupa, e o sistema nunca deixa a Prefeitura sem alguém ativo que administre a equipe.
    - **Organização:** nome do sistema, órgão, contatos, horário e um aviso para a página inicial, em **Configurações › Órgão**.
 7. **Teste ponta a ponta e divulgação.** Registre uma solicitação de teste, percorra o fluxo até a avaliação e então divulgue o endereço. O cidadão **não precisa de conta**: basta o protocolo e o código de acesso.
 
@@ -170,7 +170,7 @@ Depois de entrar, servidores vão para a área da equipe (`#/equipe`):
 - **Configurações** com índice lateral:
   - **Você:** meus dados, senha e acesso, leitura.
   - **Prefeitura:** órgão, secretarias e serviços, localidades e feriados, linha de base.
-  - **Pessoas e acesso:** a **Equipe** em crachás, com cadastro em gaveta lateral e pedidos de nova senha em destaque, e **Quem pode o quê**, uma matriz com todos os perfis lado a lado, editável e com as mudanças destacadas.
+  - **Pessoas e acesso:** a **Equipe** em crachás, com cadastro em gaveta lateral e pedidos de nova senha em destaque, e **Cargos e permissões**, com a lista de cargos, o editor e a comparação lado a lado.
   - **Dados e conformidade:** auditoria, backup, integrações e privacidade.
 
 ## Análise do repositório original
@@ -211,7 +211,7 @@ Depois de entrar, servidores vão para a área da equipe (`#/equipe`):
 | Descrição, localização, imagens e documentos | Localidade (sede, distritos, comunidades), GPS, ponto no mapa, endereço e referência. Até 5 fotos ou PDFs, com compressão no aparelho |
 | Classificação, encaminhamento, responsáveis e prazos | Fila com visões rápidas (triagem, minhas, sem responsável, urgentes, vencidas). Comando `ENCAMINHAR` (que permite reclassificar), atribuição restrita ao setor e prazo por serviço |
 | Execução, impedimentos, evidências e conclusão | Comandos `AGENDAR`, `INICIAR_EXECUCAO`, `REGISTRAR_IMPEDIMENTO`, `SOLICITAR_INFO` (pausa o prazo) e `CONCLUIR` (exige resultado e justificativa). Registro de execução com fotos, que podem ser públicas ou internas. Reabertura cria um novo ciclo |
-| Painéis com perfis e permissões | 7 perfis com matriz de permissões e escopo (setor, secretaria ou município), verificados na API. A SAD vê tudo sem dados pessoais, o que preserva a autonomia das secretarias |
+| Painéis com perfis e permissões | Cargos definidos pela Prefeitura, com alcance (setor, secretaria ou município) e permissões verificados na API; uma pessoa pode estar em vários setores ou secretarias. A SAD vê tudo sem dados pessoais, o que preserva a autonomia das secretarias |
 | Indicadores e relatórios | Painel com os 8 indicadores do item 7, filtros por período, secretaria, setor, serviço, situação, localidade e canal. Exportação CSV/JSON, relatórios salvos e impressão em PDF |
 | Georreferenciamento | Mapa (Leaflet + OpenStreetMap) por situação e prioridade, com focos de recorrência e posição aproximada quando não há ponto |
 | IA com supervisão humana | Sugestão de serviço enquanto o cidadão escreve. Na triagem, classificação, prioridade e resumo com os botões Aceitar, Ajustar e Rejeitar, todos auditados. Detecção de recorrência, alertas (prazo vencendo ou vencido, recorrência, pico por localidade) e narrativa de relatório como rascunho até a revisão do gestor. O indicador de aceitação da IA mede a confiança no apoio automático |

@@ -15,6 +15,7 @@ import { rotasAdmin, rotasIntegracao } from './rotas/admin.js';
 import { rotasAvisos } from './rotas/avisos.js';
 import { openapi } from './openapi.js';
 import { semear } from './seed.js';
+import { garantirCargos } from './cargos.js';
 import { marcarRecorrencia, recalcularAlertas } from './ia/servico.js';
 import { prepararPrimeiroAcesso, rotasConfiguracao } from './rotas/configuracao.js';
 
@@ -28,6 +29,7 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
     for (const { id } of banco.all<{ id: number }>('SELECT id FROM demandas ORDER BY criada_em')) marcarRecorrencia(banco, id);
     recalcularAlertas(banco);
   }
+  garantirCargos(banco);
   const codigoPrimeiroAcesso = prepararPrimeiroAcesso(ctx);
 
   // Tradutor de Libras do Governo Federal: so carrega quando a pessoa liga no painel de acessibilidade.

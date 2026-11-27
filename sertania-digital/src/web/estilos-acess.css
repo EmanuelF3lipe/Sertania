@@ -168,3 +168,6 @@ div[vw].enabled { z-index: 1350 !important; }
   .barra-acess button[aria-pressed] { display: none; }
   .barra-acess .ba-sobre { display: none; }
 }
+
+/* Com uma gaveta ou janela aberta (a direita), o botao redondo vai para a esquerda para nao cobrir o formulario */
+body:has(.gaveta, .janela) .botao-acess { right: auto; left: 16px; }

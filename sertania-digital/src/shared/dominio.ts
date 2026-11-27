@@ -390,11 +390,41 @@ export interface UsuarioSessao {
   nome: string;
   email: string;
   papel: Papel;
+  /** lotacao principal (a primeira), para exibicao */
   secretariaId: number | null;
   setorId: number | null;
   permissoes: Permissao[];
   /** Senha provisoria: precisa ser trocada antes de qualquer outra acao. */
   deveTrocarSenha: boolean;
+  /** Cargo definido pela Prefeitura (null para cidadao) */
+  cargoId: number | null;
+  cargo: string;
+  /** O que a pessoa enxerga: vem do cargo */
+  escopo: Escopo;
+  /** Todas as secretarias e setores a que a pessoa esta ligada */
+  secretariaIds: number[];
+  setorIds: number[];
+}
+
+/** Alcance de um cargo: o que quem o ocupa enxerga. */
+export const ESCOPOS_CARGO = ['SETOR', 'SECRETARIA', 'MUNICIPIO'] as const;
+export type EscopoCargo = (typeof ESCOPOS_CARGO)[number];
+export const ESCOPO_CARGO_INFO: Record<EscopoCargo, { nome: string; descricao: string }> = {
+  SETOR: { nome: 'Setor', descricao: 'Vê só as solicitações dos setores em que a pessoa está.' },
+  SECRETARIA: { nome: 'Secretaria', descricao: 'Vê as solicitações das secretarias em que a pessoa está.' },
+  MUNICIPIO: { nome: 'Município todo', descricao: 'Vê as solicitações de todas as secretarias.' },
+};
+
+export interface CargoDto {
+  id: number;
+  nome: string;
+  descricao: string | null;
+  escopo: EscopoCargo;
+  permissoes: Permissao[];
+  /** cargos criados na instalacao (os 7 perfis originais); podem ser editados */
+  codigo: string | null;
+  usuarios: number;
+  atualizadoEm: string;
 }
 
 export interface SugestaoClassificacao {

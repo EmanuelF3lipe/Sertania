@@ -48,7 +48,9 @@ it('equipe: esqueci a senha, senha provisória, perfis ajustáveis e dados do ó
   const setor = await req('POST', '/admin/setores', { nome: 'Iluminação', secretariaId: sec.json.id }, admin);
 
   // servidor com senha definida pelo admin e SEM troca obrigatoria
-  const novo = await req('POST', '/admin/usuarios', { nome: 'Gestor Iluminação', email: 'gestor@sertania.pe.gov.br', papel: 'GESTOR_SETOR', secretariaId: null, setorId: setor.json.id, senha: 'Inicial2026', exigirTroca: false }, admin);
+  const cargos = (await req('GET', '/admin/cargos', undefined, admin)).json as any[];
+  const gs = cargos.find((c) => c.codigo === 'GESTOR_SETOR');
+  const novo = await req('POST', '/admin/usuarios', { nome: 'Gestor Iluminação', email: 'gestor@sertania.pe.gov.br', cargoId: gs.id, lotacoes: [{ secretariaId: sec.json.id, setorId: setor.json.id }], senha: 'Inicial2026', exigirTroca: false }, admin);
   expect(novo.status).toBe(201);
   const gestor = await entrar('gestor@sertania.pe.gov.br', 'Inicial2026');
   expect((await req('GET', '/auth/eu', undefined, gestor)).json.usuario.deveTrocarSenha).toBe(false);
@@ -74,21 +76,18 @@ it('equipe: esqueci a senha, senha provisória, perfis ajustáveis e dados do ó
   const gestor3: Sessao = { cookie: troca.cookie, csrf: troca.json.csrf };
   expect((await req('GET', '/gestao/demandas', undefined, gestor3)).status).toBe(200);
 
-  // perfis: tirar "ver a fila" do gestor de setor bloqueia na hora; restaurar devolve
-  const perfis = (await req('GET', '/admin/perfis', undefined, admin)).json as any[];
-  const gs = perfis.find((p) => p.papel === 'GESTOR_SETOR');
-  expect(gs.personalizado).toBe(false);
-  await req('PUT', '/admin/perfis/GESTOR_SETOR', { permissoes: gs.permissoes.filter((p: string) => p !== 'demanda.ver') }, admin);
+  // cargo: tirar "ver a fila" do gestor de setor bloqueia na hora; devolver libera
+  const corpo = (c: any, permissoes: string[]) => ({ nome: c.nome, descricao: c.descricao, escopo: c.escopo, permissoes });
+  await req('PUT', `/admin/cargos/${gs.id}`, corpo(gs, gs.permissoes.filter((p: string) => p !== 'demanda.ver')), admin);
   expect((await req('GET', '/gestao/demandas', undefined, gestor3)).status).toBe(403);
-  expect((await req('GET', '/admin/perfis', undefined, admin)).json.find((p: any) => p.papel === 'GESTOR_SETOR').personalizado).toBe(true);
-  await req('DELETE', '/admin/perfis/GESTOR_SETOR', undefined, admin);
+  await req('PUT', `/admin/cargos/${gs.id}`, corpo(gs, gs.permissoes), admin);
   expect((await req('GET', '/gestao/demandas', undefined, gestor3)).status).toBe(200);
-  expect((await req('PUT', '/admin/perfis/GESTOR_SETOR', { permissoes: ['nao.existe'] }, admin)).status).toBe(400);
+  expect((await req('PUT', `/admin/cargos/${gs.id}`, corpo(gs, ['nao.existe']), admin)).status).toBe(400);
 
-  // administracao nunca perde o acesso a equipe e perfis
-  await req('PUT', '/admin/perfis/ADMIN_SAD', { permissoes: ['demanda.ver'] }, admin);
-  expect((await req('GET', '/admin/perfis', undefined, admin)).status).toBe(200);
-  await req('DELETE', '/admin/perfis/ADMIN_SAD', undefined, admin);
+  // administracao nunca fica sem ninguem que administre a equipe
+  const adm = cargos.find((c) => c.codigo === 'ADMIN_SAD');
+  expect((await req('PUT', `/admin/cargos/${adm.id}`, corpo(adm, ['demanda.ver']), admin)).status).toBe(409);
+  expect((await req('GET', '/admin/cargos', undefined, admin)).status).toBe(200);
 
   // dados do orgao e perfil pessoal
   const par = { nomeSistema: 'Atende Sertânia', orgao: 'Prefeitura de Sertânia', emailContato: 'ouvidoria@sertania.pe.gov.br', telefoneContato: '(87) 0000-0000', enderecoAtendimento: '', horarioAtendimento: '', avisoInicio: 'Mutirão rural' };
@@ -101,6 +100,6 @@ it('equipe: esqueci a senha, senha provisória, perfis ajustáveis e dados do ó
   // tudo auditado
   const aud = (await req('GET', '/admin/auditoria', undefined, admin)).json;
   const acoes = (aud.registros as any[]).map((r) => r.acao);
-  for (const a of ['SENHA_SOLICITADA', 'SENHA_PROVISORIA_GERADA', 'PERFIL_PERMISSOES_ALTERADAS', 'PERFIL_PERMISSOES_RESTAURADAS', 'PARAMETROS_ALTERADOS', 'PERFIL_ALTERADO']) expect(acoes).toContain(a);
+  for (const a of ['SENHA_SOLICITADA', 'SENHA_PROVISORIA_GERADA', 'CARGO_ALTERADO', 'PARAMETROS_ALTERADOS', 'PERFIL_ALTERADO']) expect(acoes).toContain(a);
   expect(aud.cadeia.integra).toBe(true);
 });

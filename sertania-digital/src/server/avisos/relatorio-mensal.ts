@@ -74,7 +74,7 @@ ${lista('Localidades com mais pedidos', locais)}
   return { assunto, texto, html, total: i.total };
 }
 
-interface Destinatario { id: number; email: string; papel: string; secretaria_id: number | null; secretaria: string | null }
+interface Destinatario { id: number; email: string; escopo: string; secretaria_id: number | null; secretaria: string | null }
 
 /** Grava os relatorios do mes anterior na fila. Devolve quantos foram gravados agora. */
 export function gerarRelatoriosMensais(banco: Banco, agora = new Date(), cfg: ConfigAvisos = lerConfigAvisos()): number {
@@ -82,13 +82,18 @@ export function gerarRelatoriosMensais(banco: Banco, agora = new Date(), cfg: Co
   const mes = mesAnterior(agora);
   if (mes.diaAtual > 7) return 0; // janela de envio: primeira semana do mes
   const pessoas = banco.all<Destinatario>(
-    `SELECT u.id, u.email, u.papel, u.secretaria_id, s.nome AS secretaria FROM usuarios u LEFT JOIN secretarias s ON s.id = u.secretaria_id
-     WHERE u.ativo = 1 AND (u.papel = 'ADMIN_SAD' OR (u.papel = 'GESTOR_SECRETARIA' AND u.secretaria_id IS NOT NULL))`);
+    `SELECT u.id, u.email, c.escopo, l.secretaria_id, s.nome AS secretaria FROM usuarios u
+     JOIN cargos c ON c.id = u.cargo_id
+     LEFT JOIN usuario_lotacoes l ON l.usuario_id = u.id AND c.escopo = 'SECRETARIA'
+     LEFT JOIN secretarias s ON s.id = l.secretaria_id
+     WHERE u.ativo = 1 AND u.papel <> 'CIDADAO' AND c.escopo IN ('MUNICIPIO','SECRETARIA')
+       AND EXISTS (SELECT 1 FROM json_each(c.permissoes) j WHERE j.value = 'painel.ver')
+       AND (c.escopo = 'MUNICIPIO' OR l.secretaria_id IS NOT NULL)`);
   let n = 0;
   for (const p of pessoas) {
-    const chave = `relatorio:${mes.chave}:u${p.id}`;
+    const chave = `relatorio:${mes.chave}:u${p.id}${p.escopo === 'SECRETARIA' ? `:s${p.secretaria_id}` : ''}`;
     if (banco.get('SELECT 1 FROM mensagens WHERE chave = ?', chave)) continue;
-    const escopo = p.papel === 'ADMIN_SAD' ? { nome: 'Município de Sertânia', secretariaId: null } : { nome: p.secretaria ?? 'Secretaria', secretariaId: p.secretaria_id };
+    const escopo = p.escopo === 'MUNICIPIO' ? { nome: 'Município de Sertânia', secretariaId: null } : { nome: p.secretaria ?? 'Secretaria', secretariaId: p.secretaria_id };
     const r = montarRelatorio(banco, cfg, escopo, mes);
     if (gravarRelatorio(banco, { usuarioId: p.id, email: p.email, assunto: r.assunto, texto: r.texto, html: r.html, chave })) n++;
   }

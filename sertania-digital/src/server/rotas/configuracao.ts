@@ -3,6 +3,7 @@ import { randomInt, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { validar, type Ctx } from '../contexto.js';
 import { criarSessao, definirCookie, hashSenha, limitador, paraSessao, sha256, validarForcaSenha } from '../auth.js';
+import { cargoAdministrador, gravarLotacoes, haAdministrador } from '../cargos.js';
 import { auditar } from '../auditoria.js';
 import { agoraIso } from '../db.js';
 import { ErroHttp, invalido } from '../erros.js';
@@ -18,7 +19,7 @@ import { lerParametros } from './admin.js';
  * administrador ativo, a rota deixa de funcionar.
  */
 export function precisaPrimeiroAcesso(ctx: Ctx): boolean {
-  return !ctx.banco.get("SELECT id FROM usuarios WHERE papel = 'ADMIN_SAD' AND ativo = 1 LIMIT 1");
+  return !haAdministrador(ctx.banco);
 }
 
 const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -69,14 +70,16 @@ export function rotasConfiguracao(ctx: Ctx): Router {
     const email = d.email.trim().toLowerCase();
     const sad = ctx.banco.get<{ id: number }>("SELECT id FROM secretarias WHERE sigla = 'SAD'");
     const usuario = ctx.banco.tx(() => {
+      const cargoId = cargoAdministrador(ctx.banco);
       const existente = ctx.banco.get<{ id: number }>('SELECT id FROM usuarios WHERE email = ?', email);
-      if (existente) ctx.banco.run("UPDATE usuarios SET nome = ?, senha_hash = ?, papel = 'ADMIN_SAD', secretaria_id = ?, ativo = 1, deve_trocar_senha = 0 WHERE id = ?", d.nome, hashSenha(d.senha), sad?.id ?? null, existente.id);
+      if (existente) ctx.banco.run("UPDATE usuarios SET nome = ?, senha_hash = ?, papel = 'ADMIN_SAD', cargo_id = ?, secretaria_id = ?, ativo = 1, deve_trocar_senha = 0 WHERE id = ?", d.nome, hashSenha(d.senha), cargoId, sad?.id ?? null, existente.id);
       const id = existente?.id ?? ctx.banco.run(
-        "INSERT INTO usuarios (nome, email, senha_hash, papel, secretaria_id, criado_em) VALUES (?,?,?, 'ADMIN_SAD', ?, ?)",
-        d.nome.trim(), email, hashSenha(d.senha), sad?.id ?? null, agoraIso(),
+        "INSERT INTO usuarios (nome, email, senha_hash, papel, cargo_id, secretaria_id, criado_em) VALUES (?,?,?, 'ADMIN_SAD', ?, ?, ?)",
+        d.nome.trim(), email, hashSenha(d.senha), cargoId, sad?.id ?? null, agoraIso(),
       ).id;
       auditar(ctx.banco, { id, nome: d.nome, ip: req.ip }, 'PRIMEIRO_ADMINISTRADOR_CRIADO', 'usuario', id);
-      return { id, nome: d.nome.trim(), email, papel: 'ADMIN_SAD' as Papel, secretaria_id: sad?.id ?? null, setor_id: null };
+      if (sad) gravarLotacoes(ctx.banco, id, 'MUNICIPIO', [{ secretariaId: sad.id, setorId: null }]);
+      return { id, nome: d.nome.trim(), email, papel: 'ADMIN_SAD' as Papel, secretaria_id: sad?.id ?? null, setor_id: null, cargo_id: cargoId };
     });
     codigoAtual = null;
     const s = criarSessao(ctx.banco, usuario.id);

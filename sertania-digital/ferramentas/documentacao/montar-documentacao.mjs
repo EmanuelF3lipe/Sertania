@@ -297,7 +297,7 @@ ${tabela(['Grupo', 'Seção', 'O que faz'], [
   ['', 'Localidades e feriados', 'Sede, distritos e comunidades rurais com coordenadas; feriados municipais.'],
   ['', 'Linha de base', 'Indicadores reais do diagnóstico, com fonte e período. Exige validação por uma segunda pessoa.'],
   ['Pessoas e acesso', 'Equipe', 'Servidores em crachás, cadastro e edição, pedidos de nova senha e senha provisória.'],
-  ['', 'Quem pode o quê', 'Matriz de permissões por perfil, editável.'],
+  ['', 'Cargos e permissões', 'Cargos criados pela Prefeitura, com alcance e permissões.'],
   ['Dados e conformidade', 'Auditoria', 'Registro encadeado de todas as ações, com verificação de integridade.'],
   ['', 'Backup e dados', 'Backups sob demanda e exportação completa em JSON.'],
   ['', 'Integrações', 'Tokens de acesso à API para outros sistemas.'],
@@ -309,14 +309,20 @@ ${tabela(['Grupo', 'Seção', 'O que faz'], [
 ${figura('17-config-equipe', 'Equipe em crachás, com busca e filtros.')}
 ${passos([
   'Clique em <b>Cadastrar servidor</b>. Abre uma gaveta lateral.',
-  'Informe nome, e-mail, <b>perfil</b> e <b>lotação</b> (secretaria e setor, quando o perfil exigir).',
+  'Informe nome, e-mail, <b>cargo</b> e <b>lotação</b>: um ou mais setores, ou uma ou mais secretarias, conforme o alcance do cargo.',
   'Defina a primeira senha ou deixe o sistema <b>gerar</b> uma. Mantenha marcada a opção que obriga a pessoa a trocar a senha no primeiro login.',
   'Entregue a senha à pessoa por um canal seguro. Ela aparece uma única vez.',
 ])}
-<p>No mesmo lugar é possível editar perfil e lotação, desativar o acesso e gerar senha provisória para quem pediu.</p>
-<h3>Quem pode o quê</h3>
-${figura('18-config-permissoes', 'Matriz de permissões por perfil.')}
-<p>A matriz mostra os 6 perfis da equipe lado a lado e as 18 permissões agrupadas por módulo. Em <b>Editar</b>, marque ou desmarque e salve: as mudanças ficam destacadas, as permissões sensíveis têm aviso e cada perfil pode voltar ao <b>padrão</b>. Toda mudança vai para a auditoria. A administração nunca perde o acesso a esta tela. O <b>escopo</b> de cada perfil (setor, secretaria ou município) não muda aqui.</p>
+<p>No mesmo lugar é possível mudar o cargo e as lotações, desativar o acesso e gerar senha provisória para quem pediu. Uma pessoa pode trabalhar em vários setores ou secretarias: ela vê as solicitações de todos os que estiverem marcados.</p>
+<h3>Cargos e permissões</h3>
+${figura('18-config-permissoes', 'Cargos da Prefeitura, com alcance, permissões e pessoas em cada um.')}
+<p>A Prefeitura cria os próprios cargos, como “Fiscal de obras” ou “Ouvidor”. Cada cargo tem:</p>
+<ul class="lista">
+<li><b>Nome e descrição.</b></li>
+<li><b>Alcance:</b> o que quem ocupa o cargo enxerga, entre <b>Setor</b>, <b>Secretaria</b> e <b>Município todo</b>.</li>
+<li><b>Permissões</b> agrupadas por área, com busca, “Selecionar todas”, “Marcar o grupo” e contador. As ações sensíveis têm aviso.</li>
+</ul>
+<p>Os botões ao lado de cada cargo <b>duplicam</b> (bom ponto de partida para um cargo parecido), <b>excluem</b> (só quando ninguém mais tem o cargo) e <b>editam</b>. Em <b>Comparar cargos</b>, uma tabela mostra todos os cargos lado a lado. Toda mudança vai para a auditoria, e o sistema nunca deixa a Prefeitura sem pelo menos uma pessoa ativa que possa administrar a equipe.</p>
 <h3>Secretarias, serviços e localidades</h3>
 ${figura('20-config-servicos', 'Catálogo de secretarias e serviços.')}
 <p>Cada serviço pertence a um setor e tem prazo e palavras-chave. Quanto melhores as palavras-chave, melhor a sugestão automática ao cidadão. Inclua todas as comunidades rurais em <b>Localidades</b> para que apareçam no registro e no mapa.</p>
@@ -337,7 +343,7 @@ const P = {
   'Tratar alertas': [0, 0, 1, 1, 1, 0],
   'Ver sugestões da IA': [1, 1, 1, 1, 1, 0],
   'Aceitar ou rejeitar a IA': [1, 0, 1, 1, 0, 0],
-  'Equipe e perfis ⚠': [0, 0, 0, 0, 1, 0],
+  'Equipe e cargos ⚠': [0, 0, 0, 0, 1, 0],
   'Secretarias, serviços e localidades': [0, 0, 0, 0, 1, 0],
   'Diagnóstico (linha de base)': [0, 0, 0, 0, 1, 0],
   'Backup e exportação completa ⚠': [0, 0, 0, 0, 1, 0],
@@ -345,9 +351,9 @@ const P = {
   'Privacidade (LGPD)': [0, 0, 0, 0, 1, 0],
   'Auditoria': [0, 0, 0, 0, 1, 1],
 };
-cap('perfis', 'Perfis e permissões', `
-<p class="abre">São 7 perfis: o cidadão e 6 perfis da equipe. Cada perfil define o <b>escopo</b> (o que a pessoa enxerga) e um conjunto de <b>permissões</b> (o que ela pode fazer). As permissões abaixo são o padrão e podem ser ajustadas em <i>Quem pode o quê</i>; o escopo não.</p>
-${tabela(['Perfil', 'Escopo', 'Resumo'], [
+cap('perfis', 'Cargos e permissões', `
+<p class="abre">Cada servidor tem um <b>cargo</b>, que define o <b>alcance</b> (o que a pessoa enxerga) e as <b>permissões</b> (o que ela pode fazer). Na instalação o sistema já traz os 6 cargos abaixo, que podem ser editados, duplicados ou complementados por cargos novos em <i>Cargos e permissões</i>. O cidadão não tem cargo: vê só as próprias solicitações.</p>
+${tabela(['Cargo inicial', 'Alcance', 'Resumo'], [
   ['Atendimento / triagem', 'Município', 'Recebe, classifica e encaminha; registra atendimento assistido.'],
   ['Equipe de campo', 'Setor', 'Executa e conclui as solicitações do setor.'],
   ['Gestor de setor', 'Setor', 'Distribui, acompanha e decide no setor; painel e relatórios.'],
@@ -355,9 +361,9 @@ ${tabela(['Perfil', 'Escopo', 'Resumo'], [
   ['Administração (SAD)', 'Município (sem dados pessoais)', 'Configura o sistema e acompanha o município de forma consolidada.'],
   ['Auditoria / controle interno', 'Município (sem dados pessoais)', 'Consulta auditoria, fila e indicadores, sem alterar nada.'],
 ])}
-<h3>Escopo</h3>
-<p>O escopo define <i>quais</i> solicitações cada pessoa enxerga: as do seu <b>setor</b>, da sua <b>secretaria</b> ou do <b>município</b> inteiro. Ele vem do perfil e é aplicado diretamente na consulta ao banco, então não há como “escapar” dele pela interface.</p>
-<h3>Permissões padrão</h3>
+<h3>Alcance</h3>
+<p>O alcance define <i>quais</i> solicitações cada pessoa enxerga: as dos seus <b>setores</b>, das suas <b>secretarias</b> ou do <b>município</b> inteiro. A pessoa pode estar em mais de um setor ou secretaria. O alcance vem do cargo e é aplicado diretamente na consulta ao banco, então não há como “escapar” dele pela interface.</p>
+<h3>Permissões dos cargos iniciais</h3>
 <table class="matriz"><thead><tr><th>Permissão</th><th>Atend.</th><th>Campo</th><th>Gest. setor</th><th>Gest. secr.</th><th>SAD</th><th>Auditor</th></tr></thead><tbody>
 ${Object.entries(P).map(([k, v]) => `<tr><td>${k.replace(' ⚠', ' <span class="sens">sensível</span>')}</td>${v.map((x) => `<td class="c">${x ? '<span class="sim">●</span>' : '<span class="nao">–</span>'}</td>`).join('')}</tr>`).join('')}
 </tbody></table>
@@ -431,7 +437,7 @@ ${tabela(['Comando', 'O que faz'], [
   ['<code>npm run iniciar -- --demonstracao --recriar</code>', 'Apaga e recria o banco de demonstração.'],
   ['<code>npm run iniciar:prod -- --limpo</code>', 'Cria o banco vazio na versão de produção.'],
   ['<code>npm run backup</code> / <code>backup:prod</code>', 'Backup manual do banco.'],
-  ['<code>npm test</code> / <code>npm run typecheck</code>', 'Roda os 35 testes / verifica os tipos do código.'],
+  ['<code>npm test</code> / <code>npm run typecheck</code>', 'Roda os 37 testes / verifica os tipos do código.'],
   ['<code>npm run documentacao:pdf</code> / <code>apresentacao:*</code>', 'Gera este manual / refaz capturas, PDF de apresentação e vídeo.'],
 ], 'compacta')}
 `);
@@ -465,7 +471,7 @@ ${tabela(['Camada', 'Tecnologia'], [
   ['Banco', 'SQLite embutido (<code>node:sqlite</code>). Migração para Postgres possível sem mudar o domínio.'],
   ['Interface', 'React 19 com Vite, PWA com fila offline em IndexedDB, mapas com Leaflet, ícones lucide.'],
   ['IA', 'Local: classificador Naive Bayes, regras de risco, recorrência e alertas. Opcional: Claude (Anthropic).'],
-  ['Testes', 'Vitest: 35 testes de domínio e de ponta a ponta pela API HTTP.'],
+  ['Testes', 'Vitest: 37 testes de domínio e de ponta a ponta pela API HTTP.'],
 ])}
 <h3>Estrutura de pastas</h3>
 <pre>src/shared/       regras de domínio, perfis, prazos
@@ -603,7 +609,7 @@ const capa = `<div class="capa"><div class="cordel"></div>${SOL}
 const DICAS = {
   visao: 'o que é e para quem', conceitos: 'protocolo, situações, prazo e escopo', cidadao: 'registrar, acompanhar e avaliar', acessibilidade: 'voz, Libras, ditado, teclado e ajustes de tela',
   entrada: 'login, primeira senha e recuperação', equipe: 'Meu dia, fila, ações e IA', gestao: 'indicadores, mapa, alertas e relatórios', ia: 'local ou Claude, tokens, consumo e limite', avisos: 'WhatsApp, SMS, e-mail, pesquisa e resumo do mês',
-  config: 'equipe, permissões, catálogo e auditoria', perfis: 'escopo e matriz de permissões', seguranca: 'proteções e direitos do titular',
+  config: 'equipe, cargos, catálogo e auditoria', perfis: 'cargos, alcance e permissões', seguranca: 'proteções e direitos do titular',
   instalacao: 'implantação, .env, rotinas e comandos', integracao: 'tokens e rotas da API', tecnico: 'tecnologias, estrutura e limites', anexos: 'contas de demonstração e glossário',
 };
 const sumario = `<div class="sumario"><div class="cordel"></div><h2 style="margin-top:8mm">Sumário</h2>

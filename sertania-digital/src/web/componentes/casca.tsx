@@ -3,7 +3,7 @@ import {
   Accessibility, Bell, ChartColumn, Code, Eye, FileText, Globe, Headset, Inbox, KeyRound, LogOut, Map as MapaIcone, Menu, Moon, PanelLeftClose,
   PanelLeftOpen, Settings, Sun, Sunrise, UserRound, X, type LucideIcon,
 } from 'lucide-react';
-import { ESCOPO_PAPEL, PAPEL_TEXTO, type Permissao } from '../../shared/dominio';
+import { type Permissao } from '../../shared/dominio';
 import { ir, useEstado, usePreferencias, useRota } from '../nucleo';
 import { abrirPainelAcessibilidade } from '../acessibilidade/painel';
 
@@ -161,9 +161,9 @@ export function Casca({ children }: { children: ReactNode }) {
             <strong>{titulo}</strong>
           </div>
           <div className="bt-acoes">
-            <span className="carimbo-lotacao" title={`${PAPEL_TEXTO[usuario.papel]}${setor ? ' · ' + setor : ''}`}>
+            <span className="carimbo-lotacao" title={`${usuario.cargo}${setor ? ', ' + setor : ''}`}>
               <span className="cl-sigla">{sigla ?? 'PMS'}</span>
-              <span className="cl-texto">{setor ?? (ESCOPO_PAPEL[usuario.papel] === 'MUNICIPIO' ? 'Município todo' : 'Secretaria')}</span>
+              <span className="cl-texto">{usuario.escopo === 'MUNICIPIO' ? 'Município todo' : usuario.escopo === 'SETOR' ? (usuario.setorIds.length > 1 ? `${usuario.setorIds.length} setores` : setor ?? 'Setor') : usuario.secretariaIds.length > 1 ? `${usuario.secretariaIds.length} secretarias` : 'Secretaria'}</span>
             </span>
             <button className="icone-botao" aria-label="Acessibilidade: letras, contraste, voz e Libras" title="Acessibilidade (Alt + 3)" aria-haspopup="dialog" onClick={abrirPainelAcessibilidade}><Accessibility size={18} /></button>
             <button className="icone-botao" aria-label={escuro ? 'Usar tema de dia' : 'Usar tema de noite'} title={escuro ? 'Tema de dia' : 'Tema de noite'} onClick={() => alternar('theme', escuro ? 'light' : 'dark')}>
@@ -174,7 +174,7 @@ export function Casca({ children }: { children: ReactNode }) {
               <button className="avatar" aria-label={`Conta de ${usuario.nome}`} aria-expanded={conta} onClick={() => setConta(!conta)}>{iniciais(usuario.nome)}</button>
               {conta && (
                 <div className="cartela" role="menu">
-                  <div className="cartela-pessoa"><span className="avatar">{iniciais(usuario.nome)}</span><span><strong>{usuario.nome}</strong><small>{PAPEL_TEXTO[usuario.papel]}</small></span></div>
+                  <div className="cartela-pessoa"><span className="avatar">{iniciais(usuario.nome)}</span><span><strong>{usuario.nome}</strong><small>{usuario.cargo}</small></span></div>
                   <button role="menuitem" onClick={() => ir('/config?secao=perfil')}><UserRound size={16} /> Meus dados</button>
                   <button role="menuitem" onClick={() => ir('/config?secao=seguranca')}><KeyRound size={16} /> Trocar minha senha</button>
                   <button role="menuitem" onClick={() => void sair()} className="sair"><LogOut size={16} /> Sair do sistema</button>

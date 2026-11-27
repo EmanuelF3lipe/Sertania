@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2, Check, ClipboardList, Database, Eye, EyeOff, FileClock, Glasses, KeyRound, Landmark, LockKeyhole, MapPin, Minus, Pencil, Plug,
-  BellRing, RotateCcw, Search, ShieldAlert, ShieldCheck, Sparkles, UserPlus, UserRound, Users, X, type LucideIcon,
+  BellRing, Copy, Plus, Search, ShieldAlert, ShieldCheck, Sparkles, Trash2, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import {
-  ESCOPO_PAPEL, ESCOPO_TEXTO, PAPEIS, PAPEL_TEXTO, PERMISSAO_INFO, TODAS_PERMISSOES, type Papel, type Permissao, type UsuarioSessao,
+  ESCOPO_CARGO_INFO, ESCOPO_TEXTO, ESCOPOS_CARGO, PERMISSAO_INFO, TODAS_PERMISSOES, type CargoDto, type EscopoCargo, type Permissao, type UsuarioSessao,
 } from '../../shared/dominio';
 import { api, fmtData, post } from '../api';
 import { get } from '../api';
@@ -35,8 +35,8 @@ const INDICE: Array<{ grupo: string; itens: ItemIndice[] }> = [
   },
   {
     grupo: 'Pessoas e acesso', itens: [
-      { id: 'equipe', rotulo: 'Equipe', icone: Users, perm: 'admin.usuarios', resumo: 'Servidores com acesso, lotação e pedidos de nova senha.' },
-      { id: 'permissoes', rotulo: 'Quem pode o quê', icone: KeyRound, perm: 'admin.usuarios', resumo: 'A matriz de permissões de todos os perfis, lado a lado.' },
+      { id: 'equipe', rotulo: 'Equipe', icone: Users, perm: 'admin.usuarios', resumo: 'Servidores com acesso, cargo, lotações e pedidos de nova senha.' },
+      { id: 'permissoes', rotulo: 'Cargos e permissões', icone: KeyRound, perm: 'admin.usuarios', resumo: 'Crie os cargos da Prefeitura e escolha o que cada um enxerga e pode fazer.' },
     ],
   },
   {
@@ -84,7 +84,7 @@ export function Configuracoes() {
         {atual.id === 'localidades' && <Localidades />}
         {atual.id === 'diagnostico' && <Diagnostico />}
         {atual.id === 'equipe' && <Equipe />}
-        {atual.id === 'permissoes' && <QuemPodeOQue />}
+        {atual.id === 'permissoes' && <CargosPermissoes />}
         {atual.id === 'auditoria' && <Auditoria />}
         {atual.id === 'dados' && <Dados />}
         {atual.id === 'integracao' && <Integracao />}
@@ -174,11 +174,11 @@ function MeusDados() {
           <button className="botao" onClick={() => void salvar()}>Salvar meus dados</button>
         </div>
         <div className="cracha cracha-grande">
-          <div className={`cracha-faixa papel-${usuario.papel}`} />
+          <div className={`cracha-faixa escopo-${usuario.escopo}`} />
           <span className="avatar">{iniciais(usuario.nome)}</span>
           <strong>{f.nome || usuario.nome}</strong>
-          <span className="pequeno">{PAPEL_TEXTO[usuario.papel]}</span>
-          <span className="pequeno mudo">{ESCOPO_TEXTO[ESCOPO_PAPEL[usuario.papel]]}</span>
+          <span className="pequeno">{usuario.cargo}</span>
+          <span className="pequeno mudo">{ESCOPO_TEXTO[usuario.escopo]}</span>
           <span className="pequeno mudo">{perfil.dados?.ultimoAcessoEm ? `Entrou por último em ${fmtData(perfil.dados.ultimoAcessoEm)}` : ''}</span>
         </div>
       </div>
@@ -382,58 +382,116 @@ function Orgao() {
 }
 
 // ------------------------------------------------------------------ Equipe (crachas)
+interface LotacaoMembro { secretariaId: number; setorId: number | null; secretaria: string; setor: string | null }
 interface Membro {
-  id: number; nome: string; email: string; telefone: string | null; papel: Papel; secretariaId: number | null; setorId: number | null; ativo: number;
-  secretaria: string | null; setor: string | null; ultimoAcessoEm: string | null; pediuSenhaEm: string | null; deveTrocarSenha: number;
+  id: number; nome: string; email: string; telefone: string | null; cargoId: number | null; cargo: string | null; escopo: EscopoCargo | null; ativo: number;
+  lotacoes: LotacaoMembro[]; ultimoAcessoEm: string | null; pediuSenhaEm: string | null; deveTrocarSenha: number;
 }
-const PAPEIS_EQUIPE = PAPEIS.filter((p) => p !== 'CIDADAO');
-export const PAPEL_CURTO: Record<Papel, string> = {
-  CIDADAO: 'Cidadão', ATENDENTE: 'Atendimento', CAMPO: 'Campo', GESTOR_SETOR: 'Gestão de setor', GESTOR_SECRETARIA: 'Gestão de secretaria', ADMIN_SAD: 'Administração', AUDITOR: 'Auditoria',
+type FormMembro = {
+  id: number; nome: string; email: string; telefone: string; cargoId: string; secretarias: number[]; setores: number[]; origem: string;
+  ativo: boolean; senha: string; gerar: boolean; exigirTroca: boolean;
 };
-type FormMembro = { id: number; nome: string; email: string; telefone: string; papel: Papel; secretariaId: string; setorId: string; ativo: boolean; senha: string; gerar: boolean; exigirTroca: boolean };
 
-function CamposLotacao({ f, mudar }: { f: FormMembro; mudar: (p: Partial<FormMembro>) => void }) {
+const textoLotacao = (m: Membro) => {
+  if (m.escopo === 'MUNICIPIO') return 'Município inteiro';
+  if (!m.lotacoes.length) return 'Sem lotação';
+  return m.lotacoes.map((l) => (l.setor ? `${l.secretaria} › ${l.setor}` : l.secretaria)).join('; ');
+};
+
+function Marcar({ marcado, aoMudar, children }: { marcado: boolean; aoMudar: () => void; children: ReactNode }) {
+  return <label className="check marcar-item"><input type="checkbox" checked={marcado} onChange={aoMudar} /><span>{children}</span></label>;
+}
+
+function CamposLotacao({ f, mudar, cargos }: { f: FormMembro; mudar: (p: Partial<FormMembro>) => void; cargos: CargoDto[] }) {
   const { catalogo } = useEstado();
   if (!catalogo) return null;
-  const precisaSetor = ['CAMPO', 'GESTOR_SETOR'].includes(f.papel);
+  const cargo = cargos.find((c) => c.id === Number(f.cargoId));
+  const alternar = (lista: number[], id: number) => (lista.includes(id) ? lista.filter((x) => x !== id) : [...lista, id]);
   return (
     <fieldset className="grupo-campos">
-      <legend>Função e lotação</legend>
-      <div className="campo"><label htmlFor="m-p">Perfil</label><select id="m-p" value={f.papel} onChange={(e) => mudar({ papel: e.target.value as Papel })}>{PAPEIS_EQUIPE.map((p) => <option key={p} value={p}>{PAPEL_TEXTO[p]}</option>)}</select>
-        <div className="ajuda">Enxerga: {(ESCOPO_TEXTO[ESCOPO_PAPEL[f.papel]] ?? "").toLowerCase()}.</div></div>
-      <div className="campo"><label htmlFor="m-s">Secretaria{f.papel === 'GESTOR_SECRETARIA' ? ' (obrigatória)' : ''}</label><select id="m-s" value={f.secretariaId} onChange={(e) => mudar({ secretariaId: e.target.value, setorId: '' })}><option value="">Nenhuma</option>{catalogo.secretarias.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
-      <div className="campo"><label htmlFor="m-st">Setor{precisaSetor ? ' (obrigatório)' : ''}</label><select id="m-st" value={f.setorId} onChange={(e) => mudar({ setorId: e.target.value })}><option value="">Nenhum</option>{catalogo.setores.filter((s) => !f.secretariaId || s.secretariaId === Number(f.secretariaId)).map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select></div>
+      <legend>Cargo e lotação</legend>
+      <div className="campo"><label htmlFor="m-c">Cargo</label>
+        <select id="m-c" value={f.cargoId} onChange={(e) => mudar({ cargoId: e.target.value })}>
+          <option value="">Escolha…</option>
+          {cargos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+        {cargo && <div className="ajuda">Alcance: <strong>{ESCOPO_CARGO_INFO[cargo.escopo].nome}</strong>. {ESCOPO_CARGO_INFO[cargo.escopo].descricao} <a href="#/config?secao=permissoes">Ver o que este cargo pode fazer</a></div>}
+      </div>
+      {cargo?.escopo === 'SETOR' && (
+        <div className="campo">
+          <span className="rotulo">Setores em que a pessoa trabalha</span>
+          <div className="lista-lotacao">
+            {catalogo.secretarias.map((s) => {
+              const setores = catalogo.setores.filter((st) => st.secretariaId === s.id);
+              if (!setores.length) return null;
+              return (
+                <div key={s.id} className="ll-grupo"><span className="ll-titulo">{s.nome}</span>
+                  {setores.map((st) => <Marcar key={st.id} marcado={f.setores.includes(st.id)} aoMudar={() => mudar({ setores: alternar(f.setores, st.id) })}>{st.nome}</Marcar>)}
+                </div>
+              );
+            })}
+          </div>
+          <div className="ajuda">Marque um ou mais. A pessoa vê as solicitações de todos os setores marcados.</div>
+        </div>
+      )}
+      {cargo?.escopo === 'SECRETARIA' && (
+        <div className="campo">
+          <span className="rotulo">Secretarias</span>
+          <div className="lista-lotacao">
+            {catalogo.secretarias.map((s) => <Marcar key={s.id} marcado={f.secretarias.includes(s.id)} aoMudar={() => mudar({ secretarias: alternar(f.secretarias, s.id) })}>{s.nome}</Marcar>)}
+          </div>
+          <div className="ajuda">Marque uma ou mais. A pessoa vê as solicitações de todas as secretarias marcadas.</div>
+        </div>
+      )}
+      {cargo?.escopo === 'MUNICIPIO' && (
+        <div className="campo"><label htmlFor="m-o">Secretaria de origem (opcional)</label>
+          <select id="m-o" value={f.origem} onChange={(e) => mudar({ origem: e.target.value })}><option value="">Nenhuma</option>{catalogo.secretarias.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}</select>
+          <div className="ajuda">Só para identificação: com este cargo a pessoa vê o município inteiro.</div>
+        </div>
+      )}
     </fieldset>
   );
 }
 
 function Equipe() {
-  const { usuario } = useEstado();
+  const { usuario, catalogo } = useEstado();
   const { dados, recarregar } = useDados<Membro[]>('/admin/usuarios');
-  const vazio: FormMembro = { id: 0, nome: '', email: '', telefone: '', papel: 'ATENDENTE', secretariaId: '', setorId: '', ativo: true, senha: '', gerar: true, exigirTroca: true };
+  const cargosApi = useDados<CargoDto[]>('/admin/cargos');
+  const cargos = cargosApi.dados ?? [];
+  const vazio: FormMembro = { id: 0, nome: '', email: '', telefone: '', cargoId: '', secretarias: [], setores: [], origem: '', ativo: true, senha: '', gerar: true, exigirTroca: true };
   const [form, setForm] = useState<FormMembro | null>(null);
   const [erroForm, setErroForm] = useState<string | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [busca, setBusca] = useState('');
-  const [papel, setPapel] = useState('');
+  const [filtroCargo, setFiltroCargo] = useState('');
   const [inativos, setInativos] = useState(false);
   const [entregar, setEntregar] = useState<{ nome: string; senha: string } | null>(null);
 
   const lista = useMemo(() => {
     const b = busca.trim().toLowerCase();
-    return (dados ?? []).filter((m) => (inativos || m.ativo) && (!papel || m.papel === papel)
-      && (!b || `${m.nome} ${m.email} ${m.telefone ?? ''} ${m.secretaria ?? ''} ${m.setor ?? ''}`.toLowerCase().includes(b)));
-  }, [dados, busca, papel, inativos]);
-  if (!dados) return <Carregando />;
+    return (dados ?? []).filter((m) => (inativos || m.ativo) && (!filtroCargo || String(m.cargoId) === filtroCargo)
+      && (!b || `${m.nome} ${m.email} ${m.telefone ?? ''} ${m.cargo ?? ''} ${textoLotacao(m)}`.toLowerCase().includes(b)));
+  }, [dados, busca, filtroCargo, inativos]);
+  if (!dados || !cargosApi.dados) return <Carregando />;
   const pedidos = dados.filter((m) => m.pediuSenhaEm && m.ativo);
 
-  const corpo = (f: FormMembro) => ({
-    nome: f.nome, email: f.email, telefone: f.telefone || null, papel: f.papel, ativo: f.ativo,
-    secretariaId: f.secretariaId ? Number(f.secretariaId) : null, setorId: f.setorId ? Number(f.setorId) : null,
+  const corpo = (f: FormMembro) => {
+    const cargo = cargos.find((c) => c.id === Number(f.cargoId));
+    const lotacoes = !cargo ? []
+      : cargo.escopo === 'SETOR' ? f.setores.map((id) => ({ secretariaId: catalogo?.setores.find((s) => s.id === id)?.secretariaId ?? 0, setorId: id }))
+        : cargo.escopo === 'SECRETARIA' ? f.secretarias.map((id) => ({ secretariaId: id, setorId: null }))
+          : f.origem ? [{ secretariaId: Number(f.origem), setorId: null }] : [];
+    return { nome: f.nome, email: f.email, telefone: f.telefone || null, cargoId: Number(f.cargoId), lotacoes, ativo: f.ativo };
+  };
+  const abrir = (m: Membro) => setForm({
+    ...vazio, id: m.id, nome: m.nome, email: m.email, telefone: m.telefone ?? '', cargoId: String(m.cargoId ?? ''), ativo: !!m.ativo,
+    secretarias: [...new Set(m.lotacoes.map((l) => l.secretariaId))], setores: m.lotacoes.map((l) => l.setorId).filter((x): x is number => x !== null),
+    origem: String(m.lotacoes[0]?.secretariaId ?? ''),
   });
   const salvar = async () => {
     if (!form) return;
     setErroForm(null);
+    if (!form.cargoId) return setErroForm('Escolha o cargo da pessoa.');
     try {
       if (form.id) {
         await api('PUT', `/admin/usuarios/${form.id}`, corpo(form));
@@ -443,7 +501,7 @@ function Equipe() {
         if (r.senhaProvisoria) setEntregar({ nome: form.nome, senha: r.senhaProvisoria });
         else setMsg({ t: 'ok', m: `${form.nome} já pode entrar.` });
       }
-      setForm(null); recarregar();
+      setForm(null); recarregar(); cargosApi.recarregar();
     } catch (e) { setErroForm((e as Error).message); }
   };
   const novaSenha = async (m: { id: number; nome: string }) => {
@@ -467,8 +525,8 @@ function Equipe() {
       )}
 
       <div className="equipe-barra">
-        <div className="com-icone busca"><Search size={16} aria-hidden="true" /><input aria-label="Procurar na equipe" placeholder="Procurar por nome, e-mail, telefone ou setor" value={busca} onChange={(e) => setBusca(e.target.value)} /></div>
-        <select aria-label="Filtrar por perfil" value={papel} onChange={(e) => setPapel(e.target.value)}><option value="">Todos os perfis</option>{PAPEIS_EQUIPE.map((p) => <option key={p} value={p}>{PAPEL_CURTO[p]}</option>)}</select>
+        <div className="com-icone busca"><Search size={16} aria-hidden="true" /><input aria-label="Procurar na equipe" placeholder="Procurar por nome, e-mail, cargo ou lotação" value={busca} onChange={(e) => setBusca(e.target.value)} /></div>
+        <select aria-label="Filtrar por cargo" value={filtroCargo} onChange={(e) => setFiltroCargo(e.target.value)}><option value="">Todos os cargos</option>{cargos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>
         <label className="check pequeno"><input type="checkbox" checked={inativos} onChange={(e) => setInativos(e.target.checked)} /><span>Incluir desligados</span></label>
         <button className="botao direita" onClick={() => { setErroForm(null); setForm(vazio); }}><UserPlus size={17} /> Cadastrar servidor</button>
       </div>
@@ -478,11 +536,11 @@ function Equipe() {
       <ul className="crachas">
         {lista.map((m) => (
           <li key={m.id} className={`cracha${m.ativo ? '' : ' desligado'}`}>
-            <div className={`cracha-faixa papel-${m.papel}`}><span>{PAPEL_CURTO[m.papel]}</span></div>
+            <div className={`cracha-faixa escopo-${m.escopo ?? 'SETOR'}`}><span>{m.cargo ?? 'Sem cargo'}</span></div>
             <span className="avatar">{iniciais(m.nome)}</span>
             <strong>{m.nome}{m.id === usuario?.id && <span className="mudo"> (você)</span>}</strong>
             <span className="pequeno mudo cracha-email">{m.email}</span>
-            <span className="pequeno">{[m.secretaria, m.setor].filter(Boolean).join(' › ') || 'Município inteiro'}</span>
+            <span className="pequeno">{textoLotacao(m)}</span>
             <div className="cracha-selos">
               {!m.ativo && <span className="etq">Desligado</span>}
               {m.ativo && m.pediuSenhaEm && <span className="etq etq-alerta">Pediu senha</span>}
@@ -490,7 +548,7 @@ function Equipe() {
               <span className="pequeno mudo">{m.ultimoAcessoEm ? `Entrou ${fmtData(m.ultimoAcessoEm)}` : 'Ainda não entrou'}</span>
             </div>
             <div className="cracha-acoes">
-              <button className="botao sec peq" onClick={() => { setErroForm(null); setForm({ ...vazio, id: m.id, nome: m.nome, email: m.email, telefone: m.telefone ?? '', papel: m.papel, secretariaId: String(m.secretariaId ?? ''), setorId: String(m.setorId ?? ''), ativo: !!m.ativo }); }}><Pencil size={15} /> Editar</button>
+              <button className="botao sec peq" onClick={() => { setErroForm(null); abrir(m); }}><Pencil size={15} /> Editar</button>
               {m.id !== usuario?.id && <button className="botao sec peq" onClick={() => void novaSenha(m)}><KeyRound size={15} /> Nova senha</button>}
             </div>
           </li>
@@ -507,7 +565,7 @@ function Equipe() {
             <div className="campo"><label htmlFor="f-e">E-mail institucional (é o login)</label><input id="f-e" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="nome@sertania.pe.gov.br" /></div>
             <div className="campo"><label htmlFor="f-t">Telefone (opcional)</label><input id="f-t" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} inputMode="tel" /></div>
           </fieldset>
-          <CamposLotacao f={form} mudar={(p) => setForm({ ...form, ...p })} />
+          <CamposLotacao f={form} mudar={(p) => setForm({ ...form, ...p })} cargos={cargos} />
           {form.id === 0 ? (
             <fieldset className="grupo-campos">
               <legend>Primeira senha</legend>
@@ -542,105 +600,174 @@ function Equipe() {
   );
 }
 
-// ------------------------------------------------------------------ Quem pode o que (matriz)
-interface PerfilDto { papel: Papel; nome: string; escopo: string; usuarios: number; padrao: Permissao[]; permissoes: Permissao[]; fixas: Permissao[]; personalizado: boolean }
+// ------------------------------------------------------------------ Cargos e permissoes
 const GRUPOS = [...new Set(Object.values(PERMISSAO_INFO).map((i) => i.grupo))];
+type FormCargo = { id: number; nome: string; descricao: string; escopo: EscopoCargo; permissoes: Permissao[] };
+const semAcento = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-function QuemPodeOQue() {
-  const { definirUsuario } = useEstado();
-  const { dados, recarregar } = useDados<PerfilDto[]>('/admin/perfis');
-  const [editando, setEditando] = useState(false);
-  const [rascunho, setRascunho] = useState<Record<string, Permissao[]>>({});
-  const [msg, setMsg] = useState<Msg>(null);
+function EditorCargo({ inicial, aoFechar, aoSalvar }: { inicial: FormCargo; aoFechar: () => void; aoSalvar: (f: FormCargo) => Promise<void> }) {
+  const [f, setF] = useState<FormCargo>(inicial);
+  const [busca, setBusca] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  if (!dados) return <Carregando />;
-
-  const atual = (p: PerfilDto) => rascunho[p.papel] ?? p.permissoes;
-  const alterados = dados.filter((p) => rascunho[p.papel] && [...rascunho[p.papel]!].sort().join() !== [...p.permissoes].sort().join());
-  const alternar = (p: PerfilDto, perm: Permissao) => {
-    if (p.fixas.includes(perm)) return;
-    const a = atual(p);
-    setRascunho({ ...rascunho, [p.papel]: a.includes(perm) ? a.filter((x) => x !== perm) : [...a, perm] });
+  const b = semAcento(busca.trim());
+  const visiveis = TODAS_PERMISSOES.filter((p) => !b || semAcento(`${PERMISSAO_INFO[p].nome} ${PERMISSAO_INFO[p].descricao} ${PERMISSAO_INFO[p].grupo}`).includes(b));
+  const marcar = (lista: Permissao[], ligar: boolean) => setF({ ...f, permissoes: ligar ? [...new Set([...f.permissoes, ...lista])] : f.permissoes.filter((p) => !lista.includes(p)) });
+  const todasVisiveis = visiveis.length > 0 && visiveis.every((p) => f.permissoes.includes(p));
+  const sensiveis = f.permissoes.filter((p) => PERMISSAO_INFO[p].sensivel);
+  const salvar = async () => {
+    setErro(null);
+    setSalvando(true);
+    try { await aoSalvar(f); } catch (e) { setErro((e as Error).message); } finally { setSalvando(false); }
   };
+  return (
+    <Gaveta titulo={inicial.id ? `Editar cargo: ${inicial.nome}` : 'Novo cargo'} aoFechar={aoFechar}
+      rodape={<><button className="botao sec" onClick={aoFechar}>Cancelar</button><button className="botao" disabled={salvando || f.nome.trim().length < 2} onClick={() => void salvar()}>{inicial.id ? 'Salvar' : 'Criar cargo'}</button></>}>
+      <fieldset className="grupo-campos">
+        <legend>Cargo</legend>
+        <div className="campo"><label htmlFor="c-n">Nome do cargo</label><input id="c-n" value={f.nome} maxLength={80} onChange={(e) => setF({ ...f, nome: e.target.value })} placeholder="Ex.: Fiscal de obras" /></div>
+        <div className="campo"><label htmlFor="c-d">Descrição (opcional)</label><input id="c-d" value={f.descricao} maxLength={300} onChange={(e) => setF({ ...f, descricao: e.target.value })} placeholder="O que esta pessoa faz" /></div>
+      </fieldset>
+      <fieldset className="grupo-campos">
+        <legend>Alcance: o que este cargo enxerga</legend>
+        <div className="alcances">
+          {ESCOPOS_CARGO.map((e) => (
+            <label key={e} className={`alcance${f.escopo === e ? ' marcado' : ''}`}>
+              <input type="radio" name="alcance" checked={f.escopo === e} onChange={() => setF({ ...f, escopo: e })} />
+              <span><strong>{ESCOPO_CARGO_INFO[e].nome}</strong><small>{ESCOPO_CARGO_INFO[e].descricao}</small></span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <fieldset className="grupo-campos">
+        <legend>Permissões <span className="contador">{f.permissoes.length} de {TODAS_PERMISSOES.length}</span></legend>
+        <div className="perm-barra">
+          <div className="com-icone busca"><Search size={16} aria-hidden="true" /><input aria-label="Procurar permissão" placeholder="Procurar permissão…" value={busca} onChange={(e) => setBusca(e.target.value)} /></div>
+          <label className="check pequeno"><input type="checkbox" checked={todasVisiveis} onChange={(e) => marcar(visiveis, e.target.checked)} /><span>{b ? 'Marcar as encontradas' : 'Selecionar todas'}</span></label>
+        </div>
+        {GRUPOS.map((g) => {
+          const doGrupo = visiveis.filter((p) => PERMISSAO_INFO[p].grupo === g);
+          if (!doGrupo.length) return null;
+          const total = TODAS_PERMISSOES.filter((p) => PERMISSAO_INFO[p].grupo === g);
+          const marcadas = total.filter((p) => f.permissoes.includes(p)).length;
+          return (
+            <details key={g} className="perm-grupo" open={!!b || marcadas > 0 || inicial.id === 0}>
+              <summary>
+                <span>{g}</span>
+                <span className="contador">{marcadas}/{total.length}</span>
+                <button type="button" className="link-botao pequeno" onClick={(ev) => { ev.preventDefault(); marcar(doGrupo, !doGrupo.every((p) => f.permissoes.includes(p))); }}>
+                  {doGrupo.every((p) => f.permissoes.includes(p)) ? 'Desmarcar o grupo' : 'Marcar o grupo'}
+                </button>
+              </summary>
+              <div className="perm-lista">
+                {doGrupo.map((p) => (
+                  <label key={p} className="check perm-item">
+                    <input type="checkbox" checked={f.permissoes.includes(p)} onChange={(e) => marcar([p], e.target.checked)} />
+                    <span><strong>{PERMISSAO_INFO[p].nome}{PERMISSAO_INFO[p].sensivel && <ShieldAlert size={14} className="m-sensivel" aria-label="ação sensível" />}</strong><small>{PERMISSAO_INFO[p].descricao}</small></span>
+                  </label>
+                ))}
+              </div>
+            </details>
+          );
+        })}
+        {visiveis.length === 0 && <p className="sec">Nenhuma permissão com “{busca}”.</p>}
+      </fieldset>
+      {sensiveis.length > 0 && <Aviso tipo="alerta"><ShieldAlert size={16} aria-hidden="true" /> Ações sensíveis neste cargo: {sensiveis.map((p) => PERMISSAO_INFO[p].nome).join(', ')}. Toda mudança fica na auditoria.</Aviso>}
+      {erro && <Aviso tipo="erro">{erro}</Aviso>}
+    </Gaveta>
+  );
+}
+
+function CargosPermissoes() {
+  const { definirUsuario } = useEstado();
+  const { dados, recarregar } = useDados<CargoDto[]>('/admin/cargos');
+  const [editor, setEditor] = useState<FormCargo | null>(null);
+  const [busca, setBusca] = useState('');
+  const [modo, setModo] = useState<'lista' | 'comparar'>('lista');
+  const [msg, setMsg] = useState<Msg>(null);
+  if (!dados) return <Carregando />;
+  const b = semAcento(busca.trim());
+  const lista = dados.filter((c) => !b || semAcento(`${c.nome} ${c.descricao ?? ''}`).includes(b));
   const atualizarSessao = async () => {
     const r = await get<{ usuario: UsuarioSessao | null }>('/auth/eu').catch(() => null);
     if (r?.usuario) definirUsuario(r.usuario);
   };
-  const salvar = async () => {
-    setSalvando(true); setMsg(null);
+  const salvar = async (f: FormCargo) => {
+    const corpo = { nome: f.nome, descricao: f.descricao || null, escopo: f.escopo, permissoes: f.permissoes };
+    if (f.id) await api('PUT', `/admin/cargos/${f.id}`, corpo);
+    else await post('/admin/cargos', corpo);
+    setMsg({ t: 'ok', m: f.id ? `Cargo “${f.nome}” atualizado. Vale a partir da próxima ação de cada pessoa.` : `Cargo “${f.nome}” criado. Agora é só escolhê-lo em Equipe.` });
+    setEditor(null); recarregar(); await atualizarSessao();
+  };
+  const duplicar = async (c: CargoDto) => {
     try {
-      for (const p of alterados) await api('PUT', `/admin/perfis/${p.papel}`, { permissoes: rascunho[p.papel] });
-      setMsg({ t: 'ok', m: `${alterados.length} ${alterados.length === 1 ? 'perfil atualizado' : 'perfis atualizados'}. Vale a partir da próxima ação de cada pessoa.` });
-      setRascunho({}); setEditando(false); recarregar(); await atualizarSessao();
-    } catch (e) { setMsg({ t: 'erro', m: (e as Error).message }); } finally { setSalvando(false); }
+      const novo = await post<CargoDto>(`/admin/cargos/${c.id}/duplicar`);
+      setMsg({ t: 'ok', m: `Criado “${novo.nome}”. Ajuste o nome e as permissões.` });
+      recarregar();
+      setEditor({ id: novo.id, nome: novo.nome, descricao: novo.descricao ?? '', escopo: novo.escopo, permissoes: novo.permissoes });
+    } catch (e) { setMsg({ t: 'erro', m: (e as Error).message }); }
   };
-  const restaurar = async (p: PerfilDto) => {
-    if (!confirm(`Voltar “${PAPEL_CURTO[p.papel]}” às permissões de fábrica?`)) return;
-    try { await api('DELETE', `/admin/perfis/${p.papel}`); recarregar(); await atualizarSessao(); } catch (e) { setMsg({ t: 'erro', m: (e as Error).message }); }
+  const excluir = async (c: CargoDto) => {
+    if (!confirm(`Excluir o cargo “${c.nome}”? Isso não pode ser desfeito.`)) return;
+    try { await api('DELETE', `/admin/cargos/${c.id}`); setMsg({ t: 'ok', m: `Cargo “${c.nome}” excluído.` }); recarregar(); } catch (e) { setMsg({ t: 'erro', m: (e as Error).message }); }
   };
-  const sensiveisNovas = alterados.flatMap((p) => (rascunho[p.papel] ?? []).filter((x) => PERMISSAO_INFO[x].sensivel && !p.padrao.includes(x)).map((x) => `${PAPEL_CURTO[p.papel]}: ${PERMISSAO_INFO[x].nome}`));
 
   return (
     <div className="coluna" style={{ gap: 12 }}>
-      <div className="linha entre">
-        <p className="sec" style={{ margin: 0, maxWidth: '62ch' }}>Cada coluna é um perfil; cada linha, uma ação. O que cada perfil <em>enxerga</em> (setor, secretaria ou município) não muda aqui.</p>
-        {!editando ? (
-          <button className="botao" onClick={() => setEditando(true)}><Pencil size={16} /> Editar matriz</button>
-        ) : (
-          <div className="linha">
-            <button className="botao sec" onClick={() => { setRascunho({}); setEditando(false); }}>Descartar</button>
-            <button className="botao" disabled={!alterados.length || salvando} onClick={() => void salvar()}>Salvar {alterados.length ? `(${alterados.length})` : ''}</button>
-          </div>
-        )}
+      <div className="equipe-barra">
+        <div className="com-icone busca"><Search size={16} aria-hidden="true" /><input aria-label="Procurar cargo" placeholder="Procurar cargo…" value={busca} onChange={(e) => setBusca(e.target.value)} /></div>
+        <div className="alternar-modo" role="group" aria-label="Como mostrar">
+          <button type="button" aria-pressed={modo === 'lista'} onClick={() => setModo('lista')}>Lista</button>
+          <button type="button" aria-pressed={modo === 'comparar'} onClick={() => setModo('comparar')}>Comparar cargos</button>
+        </div>
+        <button className="botao direita" onClick={() => setEditor({ id: 0, nome: '', descricao: '', escopo: 'SETOR', permissoes: ['demanda.ver'] })}><Plus size={17} aria-hidden="true" /> Novo cargo</button>
       </div>
-      {editando && sensiveisNovas.length > 0 && <Aviso tipo="alerta"><ShieldAlert size={16} aria-hidden="true" /> Você está liberando ações sensíveis fora do padrão: {sensiveisNovas.join('; ')}. Isso fica registrado na auditoria.</Aviso>}
       {msg && <Aviso tipo={msg.t}>{msg.m}</Aviso>}
 
-      <div className="matriz-moldura">
-        <table className={`matriz${editando ? ' editando' : ''}`}>
-          <thead>
-            <tr>
-              <th scope="col" className="m-acao">Ação</th>
-              {dados.map((p) => (
-                <th key={p.papel} scope="col">
-                  <span className={`m-perfil papel-${p.papel}`}>{PAPEL_CURTO[p.papel]}</span>
-                  <span className="m-info">{p.usuarios} {p.usuarios === 1 ? 'pessoa' : 'pessoas'}</span>
-                  {p.personalizado && !editando && <button className="link-botao pequeno" onClick={() => void restaurar(p)} title="Voltar ao padrão de fábrica"><RotateCcw size={12} /> padrão</button>}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          {GRUPOS.map((g) => (
-            <tbody key={g}>
-              <tr className="m-grupo"><th colSpan={dados.length + 1} scope="colgroup">{g}</th></tr>
-              {TODAS_PERMISSOES.filter((perm) => PERMISSAO_INFO[perm].grupo === g).map((perm) => {
-                const info = PERMISSAO_INFO[perm];
-                return (
-                  <tr key={perm}>
-                    <th scope="row" className="m-acao">
-                      <span className="m-nome">{info.nome}{info.sensivel && <ShieldAlert size={14} className="m-sensivel" aria-label="sensível" />}</span>
-                      <span className="m-desc">{info.descricao}</span>
-                    </th>
-                    {dados.map((p) => {
-                      const tem = atual(p).includes(perm);
-                      const mudou = tem !== p.padrao.includes(perm);
-                      const fixa = p.fixas.includes(perm);
-                      return (
-                        <td key={p.papel} className={`${mudou ? 'm-mudou' : ''}${tem ? ' m-sim' : ''}`}>
-                          {editando ? (
-                            <input type="checkbox" checked={tem} disabled={fixa} onChange={() => alternar(p, perm)} aria-label={`${PAPEL_CURTO[p.papel]}: ${info.nome}`} title={fixa ? 'Obrigatória para este perfil' : undefined} />
-                          ) : tem ? <Check size={18} aria-label="sim" /> : <Minus size={16} aria-label="não" className="mudo" />}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
+      {modo === 'lista' ? (
+        <ul className="lista-cargos">
+          {lista.map((c) => (
+            <li key={c.id}>
+              <div className="lc-texto">
+                <strong>{c.nome}</strong>
+                <span className="pequeno sec">{c.descricao || 'Sem descrição'}</span>
+                <span className="pequeno mudo">{c.permissoes.length} de {TODAS_PERMISSOES.length} permissões, {c.usuarios === 1 ? '1 pessoa' : `${c.usuarios} pessoas`}</span>
+              </div>
+              <span className={`selo-alcance escopo-${c.escopo}`}>{ESCOPO_CARGO_INFO[c.escopo].nome}</span>
+              <div className="lc-acoes">
+                <button className="icone-botao" aria-label={`Duplicar ${c.nome}`} title="Duplicar" onClick={() => void duplicar(c)}><Copy size={17} /></button>
+                <button className="icone-botao" aria-label={`Excluir ${c.nome}`} title={c.usuarios ? 'Há pessoas com este cargo: mude o cargo delas antes' : 'Excluir'} disabled={c.usuarios > 0} onClick={() => void excluir(c)}><Trash2 size={17} /></button>
+                <button className="botao sec peq" onClick={() => setEditor({ id: c.id, nome: c.nome, descricao: c.descricao ?? '', escopo: c.escopo, permissoes: c.permissoes })}><Pencil size={15} aria-hidden="true" /> Editar</button>
+              </div>
+            </li>
           ))}
-        </table>
-      </div>
-      <p className="ajuda"><ShieldAlert size={13} aria-hidden="true" /> marca ações sensíveis. Células destacadas diferem do padrão de fábrica. A Administração sempre mantém “Equipe e perfis”, para ninguém ficar trancado do lado de fora.</p>
+          {lista.length === 0 && <li className="vazio">Nenhum cargo com esse nome. <button className="link-botao" onClick={() => setEditor({ id: 0, nome: busca, descricao: '', escopo: 'SETOR', permissoes: ['demanda.ver'] })}>Criar “{busca}”</button></li>}
+        </ul>
+      ) : (
+        <div className="matriz-moldura">
+          <table className="matriz">
+            <thead>
+              <tr>
+                <th scope="col" className="m-acao">Permissão</th>
+                {lista.map((c) => <th key={c.id} scope="col"><span className={`m-perfil escopo-${c.escopo}`}>{c.nome}</span><span className="m-info">{ESCOPO_CARGO_INFO[c.escopo].nome}</span></th>)}
+              </tr>
+            </thead>
+            {GRUPOS.map((g) => (
+              <tbody key={g}>
+                <tr className="m-grupo"><th colSpan={lista.length + 1} scope="colgroup">{g}</th></tr>
+                {TODAS_PERMISSOES.filter((perm) => PERMISSAO_INFO[perm].grupo === g).map((perm) => (
+                  <tr key={perm}>
+                    <th scope="row" className="m-acao"><span className="m-nome">{PERMISSAO_INFO[perm].nome}{PERMISSAO_INFO[perm].sensivel && <ShieldAlert size={14} className="m-sensivel" aria-label="sensível" />}</span></th>
+                    {lista.map((c) => <td key={c.id} className={c.permissoes.includes(perm) ? 'm-sim' : ''}>{c.permissoes.includes(perm) ? <Check size={18} aria-label="sim" /> : <Minus size={16} aria-label="não" className="mudo" />}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            ))}
+          </table>
+        </div>
+      )}
+      <p className="ajuda"><ShieldAlert size={13} aria-hidden="true" /> marca ações sensíveis. Pelo menos uma pessoa ativa sempre precisa poder administrar a equipe, para ninguém ficar trancado do lado de fora.</p>
+      {editor && <EditorCargo inicial={editor} aoFechar={() => setEditor(null)} aoSalvar={salvar} />}
     </div>
   );
 }

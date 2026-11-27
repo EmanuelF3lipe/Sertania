@@ -144,6 +144,7 @@ export class Banco {
       this.db.exec('ALTER TABLE usuarios ADD COLUMN deve_trocar_senha INTEGER NOT NULL DEFAULT 0');
     if (!colunas('usuarios').includes('ultimo_acesso_em')) this.db.exec('ALTER TABLE usuarios ADD COLUMN ultimo_acesso_em TEXT');
     if (!colunas('usuarios').includes('pediu_senha_em')) this.db.exec('ALTER TABLE usuarios ADD COLUMN pediu_senha_em TEXT');
+    if (!colunas('usuarios').includes('cargo_id')) this.db.exec('ALTER TABLE usuarios ADD COLUMN cargo_id INTEGER');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS parametros (chave TEXT PRIMARY KEY, valor TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS perfis_permissoes (papel TEXT PRIMARY KEY, permissoes TEXT NOT NULL, atualizado_em TEXT NOT NULL);
@@ -153,6 +154,14 @@ export class Banco {
         ok INTEGER NOT NULL DEFAULT 1, erro TEXT, demanda_id INTEGER
       );
       CREATE INDEX IF NOT EXISTS ix_ia_uso_mes ON ia_uso (mes);
+      CREATE TABLE IF NOT EXISTS cargos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL UNIQUE COLLATE NOCASE, descricao TEXT, escopo TEXT NOT NULL,
+        permissoes TEXT NOT NULL, codigo TEXT UNIQUE, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS usuario_lotacoes (
+        usuario_id INTEGER NOT NULL, secretaria_id INTEGER, setor_id INTEGER, UNIQUE (usuario_id, secretaria_id, setor_id)
+      );
+      CREATE INDEX IF NOT EXISTS ix_lotacoes_usuario ON usuario_lotacoes (usuario_id);
       CREATE TABLE IF NOT EXISTS mensagens (
         id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, canal TEXT NOT NULL, destino TEXT NOT NULL,
         demanda_id INTEGER, usuario_id INTEGER, assunto TEXT, texto TEXT NOT NULL, html TEXT, dados TEXT,
