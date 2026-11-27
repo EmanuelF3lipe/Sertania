@@ -103,6 +103,8 @@ const foto = async (page, nome, opcoes = {}) => {
   await foto(page, '20-config-servicos');
   await ir(page, '/config?secao=ia', 1500);
   await foto(page, '24-config-ia');
+  await ir(page, '/config?secao=avisos', 1500);
+  await foto(page, '28-config-avisos');
   await ctx.close();
 }
 

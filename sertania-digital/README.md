@@ -40,7 +40,7 @@ npm start
 
 Esse modo serve a API e a interface na porta 3000. Os outros comandos são:
 
-- `npm test`: 27 testes, entre unitários e de ponta a ponta pela API HTTP.
+- `npm test`: 35 testes, entre unitários e de ponta a ponta pela API HTTP.
 - `npm run typecheck`: verificação de tipos.
 - `npm run backup`: backup manual do banco (`npm run backup:prod` no build de produção).
 - `npm run iniciar -- --demonstracao --recriar`: apaga e recria o banco de demonstração.
@@ -99,6 +99,23 @@ Rotina: backup automático diário em `dados/backups` (copie a pasta para fora d
   - mensagens de erro e telas vazias dizem o que fazer.
 
 Os tokens ficam em `src/web/estilos-base.css`.
+
+## Avisos, pesquisa de satisfação e relatório mensal
+
+Toda mudança de situação gera um aviso ao cidadão por WhatsApp, SMS e e-mail. Quando o pedido é concluído, ele recebe um link para dar a nota de 1 a 5 sem precisar do protocolo. Na primeira semana de cada mês, cada gestor de secretaria recebe por e-mail o resumo do mês anterior da sua pasta, e a administração recebe o do município.
+
+- **Fila com novas tentativas:** as mensagens entram numa fila (tabela `mensagens`) e um trabalho em segundo plano envia a cada minuto. Se o provedor falha, tenta de novo em 5 min, 30 min, 2 h e 6 h.
+- **Contato só na hora do envio:** a fila guarda o contato mascarado e busca o real na solicitação no momento de enviar. Se os dados já foram anonimizados (LGPD) ou o pedido é anônimo, a mensagem é cancelada.
+- **Horário:** WhatsApp e SMS só saem entre 8h e 20h de Recife (ajustável). O e-mail sai na hora.
+- **Provedores:** WhatsApp oficial da Meta, SMS pela Twilio, e-mail por SMTP, ou um webhook da Prefeitura (Zenvia, n8n etc.) para qualquer canal. As chaves ficam só no `.env`; veja `.env.example`.
+- **Configurações › Avisos e mensagens:** mostra o estado de cada canal e permite:
+  - enviar uma mensagem de teste;
+  - escolher em que situações avisar;
+  - ligar ou desligar a pesquisa e o relatório;
+  - receber uma prévia do relatório;
+  - ver e reenviar as últimas mensagens.
+
+Antes da fila de envio existir, os avisos eram só registrados. Esses avisos antigos aparecem como “só registrada” e não são reenviados.
 
 ## Acessibilidade
 
@@ -216,7 +233,8 @@ test/             testes de domínio e de ponta a ponta pela API HTTP
 
 ## Limites conhecidos
 
-- As notificações por SMS, WhatsApp e e-mail ficam registradas na tabela `notificacoes`, mas ainda não são enviadas. Falta plugar o provedor que o município escolher.
+- O envio de WhatsApp, SMS e e-mail está pronto, mas só funciona depois que a Prefeitura contratar os provedores e preencher o `.env`. Sem isso, as mensagens ficam registradas como “sem canal configurado”. O WhatsApp oficial exige modelos de mensagem aprovados pela Meta.
+- Os testes simulam os provedores (webhook local e chamadas à Twilio e à Meta interceptadas); nenhum envio real foi feito.
 - Ainda não há inspeção antivírus dos anexos. O repositório original usava ClamAV, que pode ser religado como etapa de quarentena.
 - O SQLite atende o piloto com tranquilidade. Para muitas secretarias com alto volume, o caminho é migrar para Postgres, mantendo o mesmo esquema.
 - O fluxo foi verificado no navegador, mas não existe suíte automatizada de testes da interface (Playwright).

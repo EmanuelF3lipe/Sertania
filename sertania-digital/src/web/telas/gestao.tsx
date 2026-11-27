@@ -9,6 +9,8 @@ import { Aviso, Carregando, EtqPrioridade, EtqStatus, Jornada, LinhaDoTempo, Lis
 import { Mapa } from '../componentes/mapa';
 import { Plus, Printer, RefreshCw, SlidersHorizontal, Sparkles } from 'lucide-react';
 
+const SITUACAO_AVISO: Record<string, string> = { PENDENTE: 'na fila', ENVIADA: 'enviado', FALHOU: 'falhou', CANCELADA: 'cancelado', SEM_PROVEDOR: 'não enviado', HISTORICO: 'registrado' };
+const NOME_CANAL: Record<string, string> = { WHATSAPP: 'WhatsApp', SMS: 'SMS', EMAIL: 'e-mail', TELEFONE: 'telefone' };
 const PRIORIDADE_NOME: Record<string, string> = { BAIXA: 'baixa', NORMAL: 'normal', ALTA: 'alta', URGENTE: 'urgente' };
 const DECISAO_TEXTO: Record<string, string> = { PENDENTE: 'ainda não decidida', ACEITA: 'aceita', AJUSTADA: 'usada com ajustes', REJEITADA: 'rejeitada' };
 
@@ -148,7 +150,7 @@ export function Fila() {
 type DetalheGestao = DemandaDetalhe & {
   similares: Array<{ id: number; protocolo: string; status: string; criada_em: string; distancia: number | null; semelhanca: number }>;
   sugestaoIa: (AnaliseIa & { id: number; status: string; criadoEm: string }) | null;
-  notificacoes: Array<{ canal: string; destino: string; mensagem: string; criadoEm: string }>;
+  notificacoes: Array<{ tipo?: string; canal: string; destino: string; status?: string; erro?: string | null; mensagem: string; criadoEm: string }>;
 };
 
 export function DetalheDemanda() {
@@ -337,8 +339,8 @@ export function DetalheDemanda() {
 
           {d.notificacoes.length > 0 && (
             <details className="cartao pequeno">
-              <summary>Avisos enviados ao cidadão ({d.notificacoes.length})</summary>
-              <ul>{d.notificacoes.map((n, i) => <li key={i}>{fmtData(n.criadoEm)}, {n.canal} {n.destino}: {n.mensagem}</li>)}</ul>
+              <summary>Avisos ao cidadão ({d.notificacoes.length})</summary>
+              <ul className="avisos-demanda">{d.notificacoes.map((n, i) => <li key={i}><span className={`selo-msg ${n.status ?? ''}`}>{SITUACAO_AVISO[n.status ?? ''] ?? 'registrado'}</span> {fmtData(n.criadoEm)}, {NOME_CANAL[n.canal] ?? n.canal} para {n.destino}{n.tipo === 'PESQUISA' ? ' (pesquisa de satisfação)' : ''}{n.erro && n.status !== 'HISTORICO' ? <div className="pequeno mudo">{n.erro}</div> : null}</li>)}</ul>
             </details>
           )}
         </div>

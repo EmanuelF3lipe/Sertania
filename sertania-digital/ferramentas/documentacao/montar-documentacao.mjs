@@ -255,6 +255,37 @@ ${figura('24-config-ia', 'Configurações › Consumo da IA.', 'media')}
 ${nota('Para estimar o gasto,', 'acompanhe alguns dias de uso real e multiplique os tokens pelo preço do modelo. Como cada solicitação nova gera uma chamada, o consumo cresce junto com o volume de pedidos. Defina um limite antes de divulgar o sistema.', 'aviso')}
 `);
 
+cap('avisos', 'Avisos, pesquisa e relatório mensal', `
+<p class="abre">O cidadão é avisado por <b>WhatsApp, SMS e e-mail</b> a cada mudança de situação, recebe um link para <b>avaliar</b> quando o pedido é concluído, e cada secretário recebe por e-mail o <b>resumo do mês</b>.</p>
+${tabela(['Mensagem', 'Quando sai', 'Para quem', 'Canal'], [
+  ['Aviso de situação', 'A cada mudança de situação escolhida pela administração (padrão: todas)', 'Cidadão que deixou telefone ou e-mail', 'WhatsApp (ou SMS, se falhar) e e-mail'],
+  ['Pesquisa de satisfação', 'Horas depois da conclusão (padrão: 2 h)', 'Cidadão que deixou telefone ou e-mail', 'WhatsApp ou SMS e e-mail, com link de avaliação'],
+  ['Relatório mensal', 'Na primeira semana do mês, com os números do mês anterior', 'Gestores de secretaria (da sua pasta) e administração (município)', 'E-mail'],
+])}
+<p>Pedidos anônimos não geram mensagem. WhatsApp e SMS só saem entre 8h e 20h de Recife; fora disso, esperam o dia seguinte. O e-mail sai na hora.</p>
+<h3>Avaliação pelo link</h3>
+<p>O link da pesquisa abre uma página com cinco notas, de “Muito ruim” a “Muito bom”, e um campo opcional de comentário (que também aceita ditado). Não pede protocolo nem código. O link vale 30 dias e serve uma vez. Quem preferir continua avaliando em <b>Acompanhar</b>.</p>
+<h3>Configurações › Avisos e mensagens</h3>
+${figura('28-config-avisos', 'Canais de envio, mensagem de teste e números dos últimos 30 dias.')}
+<ul class="lista">
+<li><b>Canais de envio:</b> mostra se WhatsApp, SMS e e-mail estão prontos e o que falta configurar, sem revelar as chaves.</li>
+<li><b>Mensagem de teste:</b> manda na hora para um telefone ou e-mail digitado, para conferir o provedor.</li>
+<li><b>O que o cidadão recebe:</b> em quais situações avisar, se manda a pesquisa e com quantas horas, e o horário de WhatsApp e SMS.</li>
+<li><b>Relatório mensal:</b> liga ou desliga, e manda uma prévia para o seu e-mail.</li>
+<li><b>Últimas mensagens:</b> situação de cada uma (enviada, na fila, falhou, sem canal configurado, cancelada), com o motivo e o botão <b>Reenviar</b>.</li>
+</ul>
+<h3>Como os envios funcionam</h3>
+<p>As mensagens entram numa fila e saem a cada minuto. Se o provedor falha, o sistema tenta de novo em 5 min, 30 min, 2 h e 6 h; depois disso, marca como falha. A fila guarda o contato <b>mascarado</b> e busca o real na solicitação só na hora de enviar: se os dados pessoais já foram anonimizados pela retenção (LGPD), a mensagem é cancelada.</p>
+<h3>Provedores (arquivo <code>.env</code>)</h3>
+${tabela(['Canal', 'Opções', 'O que configurar'], [
+  ['WhatsApp', 'Meta (API oficial) ou webhook', '<code>WHATSAPP_TOKEN</code>, <code>WHATSAPP_NUMERO_ID</code> e dois modelos aprovados pela Meta: situação ({{1}} protocolo, {{2}} situação, {{3}} link) e pesquisa ({{1}} protocolo, {{2}} serviço, {{3}} link)'],
+  ['SMS', 'Twilio ou webhook', '<code>TWILIO_SID</code>, <code>TWILIO_TOKEN</code>, <code>TWILIO_NUMERO</code>'],
+  ['E-mail', 'SMTP ou webhook', '<code>SMTP_HOST</code>, <code>SMTP_PORTA</code>, usuário, senha e <code>SMTP_REMETENTE</code>'],
+  ['Webhook', 'Qualquer gateway (Zenvia, n8n, barramento do município)', '<code>AVISOS_WEBHOOK_URL</code> e <code>AVISOS_WEBHOOK_SEGREDO</code>: o sistema envia um POST JSON assinado com HMAC no cabeçalho <code>X-Sertania-Assinatura</code>'],
+])}
+${nota('Também defina', '<code>URL_PUBLICA</code> com o endereço do sistema: ele vai nos links de acompanhamento, avaliação e painel. Sem provedor configurado, as mensagens ficam registradas como “sem canal configurado” e podem ser reenviadas depois.', 'aviso')}
+`);
+
 cap('config', 'Configurações (administração)', `
 <p class="abre">Tudo o que se ajusta no sistema fica em <b>Configurações</b>, com um índice lateral em quatro grupos.</p>
 ${tabela(['Grupo', 'Seção', 'O que faz'], [
@@ -270,6 +301,7 @@ ${tabela(['Grupo', 'Seção', 'O que faz'], [
   ['Dados e conformidade', 'Auditoria', 'Registro encadeado de todas as ações, com verificação de integridade.'],
   ['', 'Backup e dados', 'Backups sob demanda e exportação completa em JSON.'],
   ['', 'Integrações', 'Tokens de acesso à API para outros sistemas.'],
+  ['', 'Avisos e mensagens', 'WhatsApp, SMS e e-mail ao cidadão, pesquisa de satisfação e relatório mensal.'],
   ['', 'Consumo da IA', 'Tokens gastos com o Claude por mês e limite mensal.'],
   ['', 'Privacidade', 'Política de retenção e anonimização (LGPD).'],
 ], 'compacta')}
@@ -399,7 +431,7 @@ ${tabela(['Comando', 'O que faz'], [
   ['<code>npm run iniciar -- --demonstracao --recriar</code>', 'Apaga e recria o banco de demonstração.'],
   ['<code>npm run iniciar:prod -- --limpo</code>', 'Cria o banco vazio na versão de produção.'],
   ['<code>npm run backup</code> / <code>backup:prod</code>', 'Backup manual do banco.'],
-  ['<code>npm test</code> / <code>npm run typecheck</code>', 'Roda os 27 testes / verifica os tipos do código.'],
+  ['<code>npm test</code> / <code>npm run typecheck</code>', 'Roda os 35 testes / verifica os tipos do código.'],
   ['<code>npm run documentacao:pdf</code> / <code>apresentacao:*</code>', 'Gera este manual / refaz capturas, PDF de apresentação e vídeo.'],
 ], 'compacta')}
 `);
@@ -433,7 +465,7 @@ ${tabela(['Camada', 'Tecnologia'], [
   ['Banco', 'SQLite embutido (<code>node:sqlite</code>). Migração para Postgres possível sem mudar o domínio.'],
   ['Interface', 'React 19 com Vite, PWA com fila offline em IndexedDB, mapas com Leaflet, ícones lucide.'],
   ['IA', 'Local: classificador Naive Bayes, regras de risco, recorrência e alertas. Opcional: Claude (Anthropic).'],
-  ['Testes', 'Vitest: 27 testes de domínio e de ponta a ponta pela API HTTP.'],
+  ['Testes', 'Vitest: 35 testes de domínio e de ponta a ponta pela API HTTP.'],
 ])}
 <h3>Estrutura de pastas</h3>
 <pre>src/shared/       regras de domínio, perfis, prazos
@@ -448,7 +480,7 @@ ferramentas/      geradores da apresentação e deste manual</pre>
 <h3>Limites conhecidos</h3>
 <ul class="lista">
 <li>O consumo da IA é medido em tokens; o valor em reais depende da tabela de preços da Anthropic, que o sistema não consulta.</li>
-<li>Notificações por SMS, WhatsApp e e-mail ficam registradas, mas ainda não são enviadas: falta conectar o provedor escolhido pelo município.</li>
+<li>O envio de WhatsApp, SMS e e-mail só funciona depois que a Prefeitura contratar os provedores e preencher o <code>.env</code>; o WhatsApp oficial exige modelos aprovados pela Meta.</li>
 <li>Ainda não há antivírus nos anexos (pode ser adicionado como etapa de quarentena).</li>
 <li>O SQLite atende o piloto; para alto volume, migrar para Postgres.</li>
 <li>Os mapas públicos do OpenStreetMap têm limite de uso; em produção, use provedor próprio ou contratado.</li>
@@ -570,7 +602,7 @@ const capa = `<div class="capa"><div class="cordel"></div>${SOL}
 
 const DICAS = {
   visao: 'o que é e para quem', conceitos: 'protocolo, situações, prazo e escopo', cidadao: 'registrar, acompanhar e avaliar', acessibilidade: 'voz, Libras, ditado, teclado e ajustes de tela',
-  entrada: 'login, primeira senha e recuperação', equipe: 'Meu dia, fila, ações e IA', gestao: 'indicadores, mapa, alertas e relatórios', ia: 'local ou Claude, tokens, consumo e limite',
+  entrada: 'login, primeira senha e recuperação', equipe: 'Meu dia, fila, ações e IA', gestao: 'indicadores, mapa, alertas e relatórios', ia: 'local ou Claude, tokens, consumo e limite', avisos: 'WhatsApp, SMS, e-mail, pesquisa e resumo do mês',
   config: 'equipe, permissões, catálogo e auditoria', perfis: 'escopo e matriz de permissões', seguranca: 'proteções e direitos do titular',
   instalacao: 'implantação, .env, rotinas e comandos', integracao: 'tokens e rotas da API', tecnico: 'tecnologias, estrutura e limites', anexos: 'contas de demonstração e glossário',
 };

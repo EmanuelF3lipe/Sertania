@@ -11,6 +11,7 @@ import { conflito, invalido, naoEncontrado, proibido } from './erros.js';
 import { sha256 } from './auth.js';
 import { auditar, type Ator } from './auditoria.js';
 import { mascararEmail, mascararNome, mascararTelefone } from './privacidade.js';
+import { agendarPesquisa, avisarSituacao } from './avisos/fila.js';
 
 export interface LinhaDemanda {
   id: number; protocolo: string; codigo_hash: string; servico_id: number; setor_id: number; secretaria_id: number;
@@ -215,15 +216,9 @@ export function abrirDemanda(
     if (n.chaveIdempotencia)
       banco.run('INSERT INTO idempotencia (chave, resposta, criado_em) VALUES (?,?,?)', n.chaveIdempotencia, JSON.stringify(resposta), agora.toISOString());
     auditar(banco, ator, 'DEMANDA_ABERTA', 'demanda', id, { protocolo, canal: n.canal, servicoId: servico.id });
-    notificar(banco, id, protocolo, 'RECEBIDA', n);
+    avisarSituacao(banco, { id, protocolo, telefone: n.anonima ? null : n.telefone, email: n.anonima ? null : n.email, anonima: n.anonima }, 'RECEBIDA');
     return { ...resposta, repetida: false };
   });
-}
-
-function notificar(banco: Banco, demandaId: number, protocolo: string, status: Status, contato: { telefone: string | null; email: string | null; anonima?: boolean }) {
-  const msg = `Prefeitura de Sertânia: sua solicitação ${protocolo} está "${STATUS_TEXTO[status]}". Acompanhe com o protocolo e o código de acesso.`;
-  if (contato.telefone) banco.run('INSERT INTO notificacoes (demanda_id, canal, destino, mensagem, criado_em) VALUES (?,?,?,?,?)', demandaId, 'SMS/WHATSAPP', mascararTelefone(contato.telefone), msg, agoraIso());
-  if (contato.email) banco.run('INSERT INTO notificacoes (demanda_id, canal, destino, mensagem, criado_em) VALUES (?,?,?,?,?)', demandaId, 'EMAIL', mascararEmail(contato.email), msg, agoraIso());
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +309,9 @@ export function executarComando(banco: Banco, id: number, comando: Comando, e: E
       e.notaInterna?.trim() || null, u.id, u.nome, agoraS,
     );
     auditar(banco, ator, `COMANDO_${comando}`, 'demanda', id, { de: d.status, para: regra.para, servicoId: e.servicoId, resultado: e.resultado });
-    if (d.status !== regra.para || comando === 'ENCAMINHAR') notificar(banco, id, d.protocolo, regra.para, { telefone: d.solicitante_telefone, email: d.solicitante_email });
+    const contato = { id, protocolo: d.protocolo, telefone: d.solicitante_telefone, email: d.solicitante_email, anonima: d.anonima || !!d.anonimizada_em };
+    if (d.status !== regra.para || comando === 'ENCAMINHAR') avisarSituacao(banco, contato, regra.para);
+    if (comando === 'CONCLUIR') agendarPesquisa(banco, { ...contato, servico: d.servico_nome });
     return carregar(banco, id);
   });
 }

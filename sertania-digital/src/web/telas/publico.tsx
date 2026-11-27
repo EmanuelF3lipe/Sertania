@@ -184,3 +184,61 @@ export function MinhasDemandas() {
     </div>
   );
 }
+
+interface InfoPesquisa { protocolo: string; servico: string; concluidaEm: string | null; status: string; avaliada: boolean; nota: number | null }
+const ROTULO_NOTA = ['', 'Muito ruim', 'Ruim', 'Mais ou menos', 'Bom', 'Muito bom'];
+
+/** Avaliacao pelo link da pesquisa (WhatsApp, SMS ou e-mail): sem protocolo e sem codigo. */
+export function AvaliarPorLink({ token }: { token: string }) {
+  const { dados, erro } = useDados<InfoPesquisa>(`/publico/pesquisa/${encodeURIComponent(token)}`);
+  const [nota, setNota] = useState(0);
+  const [comentario, setComentario] = useState('');
+  const [enviado, setEnviado] = useState(false);
+  const [falha, setFalha] = useState<string | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  if (erro) return <div className="estreito"><h1>Avaliar o atendimento</h1><Aviso tipo="erro">{erro}</Aviso><p><a href="#/acompanhar">Ir para Acompanhar</a></p></div>;
+  if (!dados) return <Carregando />;
+  const enviar = async () => {
+    setFalha(null);
+    setEnviando(true);
+    try {
+      await post(`/publico/pesquisa/${encodeURIComponent(token)}`, { nota, comentario });
+      setEnviado(true);
+    } catch (e) { setFalha((e as Error).message); } finally { setEnviando(false); }
+  };
+  if (enviado || dados.avaliada)
+    return (
+      <div className="estreito cartao avaliar-fim">
+        <h1>Obrigado pela avaliação</h1>
+        <p>Sua nota para a solicitação <strong>{dados.protocolo}</strong> foi registrada{dados.nota ? `: ${dados.nota} de 5` : ''}. Ela ajuda a Prefeitura a melhorar o atendimento.</p>
+        <a className="botao sec" href="#/">Voltar ao início</a>
+      </div>
+    );
+  return (
+    <div className="estreito">
+      <h1>Como foi o atendimento?</h1>
+      <p className="sec">Solicitação <strong>{dados.protocolo}</strong>, {dados.servico}{dados.concluidaEm ? `, concluída em ${fmtData(dados.concluidaEm, false)}` : ''}.</p>
+      <div className="cartao">
+        <fieldset className="notas">
+          <legend className="rotulo">Sua nota</legend>
+          <div className="notas-opcoes">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <label key={n} className={`nota-opcao${nota === n ? ' marcada' : ''}`}>
+                <input type="radio" name="nota" value={n} checked={nota === n} onChange={() => setNota(n)} />
+                <span className="no-num" aria-hidden="true">{n}</span>
+                <span className="no-rot">{ROTULO_NOTA[n]}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="campo">
+          <label htmlFor="av-com">Quer contar mais? <span className="opcional">(opcional)</span></label>
+          <textarea id="av-com" value={comentario} maxLength={1000} onChange={(e) => setComentario(e.target.value)} placeholder="Ex.: resolveram no mesmo dia, mas a rua ficou suja." />
+          <BotaoDitado campoId="av-com" />
+        </div>
+        {falha && <Aviso tipo="erro">{falha}</Aviso>}
+        <button type="button" className="botao" disabled={!nota || enviando} onClick={() => void enviar()}>{enviando ? 'Enviando…' : 'Enviar avaliação'}</button>
+      </div>
+    </div>
+  );
+}

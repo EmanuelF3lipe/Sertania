@@ -7,7 +7,7 @@ import { PAPEL_TEXTO } from '../shared/dominio';
 import { useDados, useEstado, useOnline, usePreferencias, useRota } from './nucleo';
 import { sincronizar } from './offline';
 import { Aviso, Carregando } from './componentes/comuns';
-import { Acompanhar, MinhasDemandas, Transparencia } from './telas/publico';
+import { Acompanhar, AvaliarPorLink, MinhasDemandas, Transparencia } from './telas/publico';
 import { Entrar } from './telas/entrar';
 import { InicioEquipe } from './telas/equipe';
 import { Configuracoes } from './telas/config';
@@ -129,6 +129,7 @@ export function App() {
   else if (!a) tela = <Inicio />;
   else if (a === 'nova') tela = <NovaDemanda />;
   else if (a === 'acompanhar') tela = <Acompanhar />;
+  else if (a === 'avaliar' && b) tela = <AvaliarPorLink token={b} />;
   else if (a === 'transparencia') tela = <Transparencia />;
   else if (a === 'acessibilidade') { tela = <PaginaAcessibilidade />; interna = equipe; }
   else if (a === 'minhas') tela = <MinhasDemandas />;

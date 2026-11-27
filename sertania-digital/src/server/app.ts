@@ -12,6 +12,7 @@ import { rotasPublicas } from './rotas/publico.js';
 import { rotasAuth, rotasCidadao } from './rotas/auth.js';
 import { rotasGestao } from './rotas/gestao.js';
 import { rotasAdmin, rotasIntegracao } from './rotas/admin.js';
+import { rotasAvisos } from './rotas/avisos.js';
 import { openapi } from './openapi.js';
 import { semear } from './seed.js';
 import { marcarRecorrencia, recalcularAlertas } from './ia/servico.js';
@@ -61,6 +62,7 @@ export function criarApp(sobrescrever: Partial<Config> & { arquivoBanco?: string
   app.use('/api/auth', rotasAuth(ctx));
   app.use('/api/cidadao', rotasCidadao(ctx));
   app.use('/api/gestao', rotasGestao(ctx));
+  app.use('/api/admin/avisos', rotasAvisos(ctx));
   app.use('/api/admin', rotasAdmin(ctx));
   app.use('/api/integracao', rotasIntegracao(ctx));
   app.use('/api', (_req, _res, next) => next(new ErroHttp(404, 'Rota não encontrada', 'nao_encontrado')));

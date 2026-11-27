@@ -153,7 +153,26 @@ export class Banco {
         ok INTEGER NOT NULL DEFAULT 1, erro TEXT, demanda_id INTEGER
       );
       CREATE INDEX IF NOT EXISTS ix_ia_uso_mes ON ia_uso (mes);
+      CREATE TABLE IF NOT EXISTS mensagens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, canal TEXT NOT NULL, destino TEXT NOT NULL,
+        demanda_id INTEGER, usuario_id INTEGER, assunto TEXT, texto TEXT NOT NULL, html TEXT, dados TEXT,
+        status TEXT NOT NULL DEFAULT 'PENDENTE', via TEXT, id_externo TEXT, tentativas INTEGER NOT NULL DEFAULT 0, erro TEXT,
+        criado_em TEXT NOT NULL, proxima_em TEXT NOT NULL, enviado_em TEXT, chave TEXT UNIQUE
+      );
+      CREATE INDEX IF NOT EXISTS ix_mensagens_fila ON mensagens (status, proxima_em);
+      CREATE INDEX IF NOT EXISTS ix_mensagens_demanda ON mensagens (demanda_id);
+      CREATE TABLE IF NOT EXISTS pesquisas (
+        token_hash TEXT PRIMARY KEY, demanda_id INTEGER NOT NULL, criado_em TEXT NOT NULL, expira_em TEXT NOT NULL, usado_em TEXT
+      );
     `);
+    // Avisos gravados antes da fila de envio existir: entram como historico (nunca foram enviados).
+    const legado = this.db.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'notificacoes'").get() as { n: number };
+    const jaMigrado = this.db.prepare("SELECT COUNT(*) AS n FROM mensagens WHERE status = 'HISTORICO'").get() as { n: number };
+    if (legado.n && !jaMigrado.n) {
+      this.db.exec(`INSERT INTO mensagens (tipo, canal, destino, demanda_id, texto, status, erro, criado_em, proxima_em)
+        SELECT 'SITUACAO', CASE WHEN canal = 'EMAIL' THEN 'EMAIL' ELSE 'TELEFONE' END, destino, demanda_id, mensagem, 'HISTORICO',
+               'Registrado antes do envio automático existir', criado_em, criado_em FROM notificacoes`);
+    }
   }
 
   private conv(params: Param[]): SQLInputValue[] {

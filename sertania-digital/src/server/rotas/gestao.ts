@@ -85,7 +85,7 @@ export function rotasGestao(ctx: Ctx): Router {
       ...paraDetalhe(b, d, u),
       similares: similares(b, d),
       sugestaoIa: sugestao ? { ...(JSON.parse(sugestao.conteudo) as AnaliseIa), id: sugestao.id, status: sugestao.status, provedor: sugestao.provedor, criadoEm: sugestao.criado_em } : null,
-      notificacoes: b.all('SELECT canal, destino, mensagem, criado_em AS criadoEm FROM notificacoes WHERE demanda_id = ? ORDER BY id DESC LIMIT 20', d.id),
+      notificacoes: b.all("SELECT tipo, COALESCE(via, canal) AS canal, destino, status, erro, COALESCE(assunto, texto) AS mensagem, COALESCE(enviado_em, criado_em) AS criadoEm FROM mensagens WHERE demanda_id = ? ORDER BY id DESC LIMIT 20", d.id),
     });
   });
 

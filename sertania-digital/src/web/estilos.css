@@ -283,3 +283,15 @@ button.opcao-srv { grid-template-columns: 40px 1fr auto; }
 .faixa-kpi .kpi { padding: 14px 16px 12px; box-shadow: 1px 0 0 var(--borda), 0 1px 0 var(--borda); }
 .faixa-kpi .kpi .val { color: var(--primaria); }
 .anexo-nome { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ---------------------------------------------------------- avaliar pelo link */
+.notas { border: 0; margin: 0 0 16px; padding: 0; }
+.notas-opcoes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.nota-opcao { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px; border: 2px solid var(--borda); border-radius: 10px; cursor: pointer; text-align: center; font-weight: 400; margin: 0; }
+.nota-opcao input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.nota-opcao:hover { border-color: var(--texto-3); }
+.nota-opcao.marcada { border-color: var(--primaria); background: var(--primaria-suave); }
+.nota-opcao:has(input:focus-visible) { outline: 3px solid var(--foco); outline-offset: 2px; }
+.no-num { font-family: var(--fonte-titulo); font-weight: 700; font-size: 1.6rem; color: var(--primaria); line-height: 1; }
+.no-rot { font-size: 0.8rem; color: var(--texto-2); }
+@media (max-width: 420px) { .no-rot { font-size: 0.7rem; } }

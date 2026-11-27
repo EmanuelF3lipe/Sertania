@@ -11,6 +11,7 @@ import { invalido, naoEncontrado, conflito } from '../erros.js';
 import { auditar } from '../auditoria.js';
 import { marcarRecorrencia, sugerirServico, analisarDemanda } from '../ia/servico.js';
 import { calcularIndicadores, dadosAbertos } from '../indicadores.js';
+import { lerPesquisa, marcarPesquisaUsada } from '../avisos/fila.js';
 
 export const esquemaNova = z.object({
   servicoId: z.coerce.number().int().positive(),
@@ -134,7 +135,32 @@ export function rotasPublicas(ctx: Ctx): Router {
     if (d.status !== 'CONCLUIDA') throw conflito('A avaliação fica disponível quando a solicitação for concluída');
     if (d.avaliacao_nota) throw conflito('Esta solicitação já foi avaliada. Obrigado!');
     ctx.banco.run('UPDATE demandas SET avaliacao_nota = ?, avaliacao_comentario = ? WHERE id = ?', dados.nota, dados.comentario, d.id);
+    marcarPesquisaUsada(ctx.banco, d.id);
     auditar(ctx.banco, ator(req), 'AVALIACAO', 'demanda', d.id, { nota: dados.nota });
+    res.json({ ok: true });
+  });
+
+  // Pesquisa de satisfacao por link (mandado por WhatsApp, SMS ou e-mail): avalia sem protocolo nem codigo.
+  const pesquisaValida = (token: string) => {
+    const p = /^[A-Za-z0-9_-]{20,40}$/.test(token) ? lerPesquisa(ctx.banco, token) : null;
+    if (!p) throw naoEncontrado('Link de avaliação inválido. Confira se copiou o endereço inteiro.');
+    if (p.expirado) throw conflito('Este link de avaliação expirou. Você ainda pode avaliar em Acompanhar, com o protocolo e o código.');
+    return p;
+  };
+  r.get('/pesquisa/:token', lim, (req, res) => {
+    const p = pesquisaValida(String(req.params['token']));
+    const d = carregar(ctx.banco, p.demandaId);
+    res.json({ protocolo: d.protocolo, servico: d.servico_nome, concluidaEm: d.concluida_em, status: d.status, avaliada: !!d.avaliacao_nota || p.usado, nota: d.avaliacao_nota });
+  });
+  r.post('/pesquisa/:token', lim, (req, res) => {
+    const p = pesquisaValida(String(req.params['token']));
+    const dados = validar(z.object({ nota: z.number().int().min(1).max(5), comentario: textoOpc }), req.body);
+    const d = carregar(ctx.banco, p.demandaId);
+    if (d.status !== 'CONCLUIDA') throw conflito('A solicitação foi reaberta e ainda não está concluída. Obrigado mesmo assim!');
+    if (d.avaliacao_nota) throw conflito('Esta solicitação já foi avaliada. Obrigado!');
+    ctx.banco.run('UPDATE demandas SET avaliacao_nota = ?, avaliacao_comentario = ? WHERE id = ?', dados.nota, dados.comentario, d.id);
+    marcarPesquisaUsada(ctx.banco, d.id);
+    auditar(ctx.banco, ator(req), 'AVALIACAO', 'demanda', d.id, { nota: dados.nota, via: 'link' });
     res.json({ ok: true });
   });
 

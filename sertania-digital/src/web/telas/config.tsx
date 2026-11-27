@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Building2, Check, ClipboardList, Database, Eye, EyeOff, FileClock, Glasses, KeyRound, Landmark, LockKeyhole, MapPin, Minus, Pencil, Plug,
-  RotateCcw, Search, ShieldAlert, ShieldCheck, Sparkles, UserPlus, UserRound, Users, X, type LucideIcon,
+  BellRing, RotateCcw, Search, ShieldAlert, ShieldCheck, Sparkles, UserPlus, UserRound, Users, X, type LucideIcon,
 } from 'lucide-react';
 import {
   ESCOPO_PAPEL, ESCOPO_TEXTO, PAPEIS, PAPEL_TEXTO, PERMISSAO_INFO, TODAS_PERMISSOES, type Papel, type Permissao, type UsuarioSessao,
@@ -12,9 +12,10 @@ import { abrirPainelAcessibilidade } from '../acessibilidade/painel';
 import { ir, useDados, useEstado, usePreferencias, useRota, type Parametros } from '../nucleo';
 import { Aviso, Carregando, Copiar } from '../componentes/comuns';
 import { iniciais } from '../componentes/casca';
+import { AvisosMensagens } from './avisos';
 import { Auditoria, CatalogoAdmin, Dados, Diagnostico, Integracao, Localidades, PrimeirosPassos, Privacidade } from './admin';
 
-type Secao = 'perfil' | 'seguranca' | 'leitura' | 'orgao' | 'estrutura' | 'localidades' | 'diagnostico' | 'equipe' | 'permissoes' | 'auditoria' | 'dados' | 'integracao' | 'ia' | 'privacidade';
+type Secao = 'perfil' | 'seguranca' | 'leitura' | 'orgao' | 'estrutura' | 'localidades' | 'diagnostico' | 'equipe' | 'permissoes' | 'auditoria' | 'dados' | 'integracao' | 'ia' | 'avisos' | 'privacidade';
 interface ItemIndice { id: Secao; rotulo: string; icone: LucideIcon; perm?: Permissao; resumo: string }
 const INDICE: Array<{ grupo: string; itens: ItemIndice[] }> = [
   {
@@ -43,6 +44,7 @@ const INDICE: Array<{ grupo: string; itens: ItemIndice[] }> = [
       { id: 'auditoria', rotulo: 'Auditoria', icone: FileClock, perm: 'auditoria.ver', resumo: 'O registro encadeado de cada ação feita no sistema.' },
       { id: 'dados', rotulo: 'Backup e exportação', icone: Database, perm: 'admin.backup', resumo: 'Cópias de segurança e todos os dados em formato aberto.' },
       { id: 'integracao', rotulo: 'Integrações', icone: Plug, perm: 'admin.integracao', resumo: 'Chaves para outros sistemas usarem a API, sem dados pessoais.' },
+      { id: 'avisos', rotulo: 'Avisos e mensagens', icone: BellRing, perm: 'admin.integracao', resumo: 'WhatsApp, SMS e e-mail ao cidadão, pesquisa de satisfação e relatório mensal.' },
       { id: 'ia', rotulo: 'Consumo da IA', icone: Sparkles, perm: 'admin.integracao', resumo: 'Tokens gastos com a IA externa (Claude) e o limite mensal.' },
       { id: 'privacidade', rotulo: 'Privacidade', icone: LockKeyhole, perm: 'admin.privacidade', resumo: 'Retenção, anonimização e direitos do titular (LGPD).' },
     ],
@@ -87,6 +89,7 @@ export function Configuracoes() {
         {atual.id === 'dados' && <Dados />}
         {atual.id === 'integracao' && <Integracao />}
         {atual.id === 'ia' && <ConsumoIa />}
+        {atual.id === 'avisos' && <AvisosMensagens />}
         {atual.id === 'privacidade' && <Privacidade />}
       </div>
     </div>

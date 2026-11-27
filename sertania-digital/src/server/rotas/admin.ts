@@ -290,7 +290,7 @@ export function rotasAdmin(ctx: Ctx): Router {
 
   r.get('/notificacoes', (req, res) => {
     exigir(req, 'auditoria.ver', 'admin.privacidade');
-    res.json(b.all('SELECT n.*, d.protocolo FROM notificacoes n JOIN demandas d ON d.id = n.demanda_id ORDER BY n.id DESC LIMIT 200'));
+    res.json(b.all('SELECT m.id, m.tipo, m.canal, m.destino, m.via, m.status, m.erro, m.criado_em, m.enviado_em, d.protocolo FROM mensagens m LEFT JOIN demandas d ON d.id = m.demanda_id ORDER BY m.id DESC LIMIT 200'));
   });
 
   // ----------------------------------------------------------- backup e portabilidade

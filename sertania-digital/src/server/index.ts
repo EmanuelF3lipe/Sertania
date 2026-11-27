@@ -3,10 +3,16 @@ import { recalcularAlertas } from './ia/servico.js';
 import { anonimizarVencidas } from './privacidade.js';
 import { fazerBackup } from './rotas/admin.js';
 import { auditar } from './auditoria.js';
+import { processarFila } from './avisos/fila.js';
+import { gerarRelatoriosMensais } from './avisos/relatorio-mensal.js';
 
 const { app, ctx, codigoPrimeiroAcesso } = criarApp();
 
-// Rotinas: alertas a cada 5 minutos; retencao (LGPD) e backup diarios.
+// Rotinas: avisos a cada minuto; relatorio mensal a cada hora (so sai na 1a semana do mes, uma vez);
+// alertas a cada 5 minutos; retencao (LGPD) e backup diarios.
+setInterval(() => void processarFila(ctx.banco).catch((e: Error) => console.error('Fila de avisos:', e.message)), 60_000).unref();
+setInterval(() => { try { gerarRelatoriosMensais(ctx.banco); } catch (e) { console.error('Relatório mensal:', (e as Error).message); } }, 3600_000).unref();
+setTimeout(() => { try { gerarRelatoriosMensais(ctx.banco); } catch { /* tenta de novo na proxima hora */ } }, 30_000).unref();
 setInterval(() => recalcularAlertas(ctx.banco), 5 * 60_000).unref();
 setInterval(() => {
   const n = anonimizarVencidas(ctx.banco, ctx.config.retencaoDias);

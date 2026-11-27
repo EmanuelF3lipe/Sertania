@@ -381,3 +381,24 @@ input:disabled { background: var(--superficie-2); color: var(--texto-3); }
 .filtros-acoes { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; grid-column: auto / span 2; }
 .filtros-acoes .botao { white-space: nowrap; min-height: 38px; }
 .titulo-icone { display: flex; align-items: center; gap: 8px; }
+
+/* ---------------------------------------------------------- avisos e mensagens */
+.canais-envio { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.canais-envio li { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1.5px solid var(--borda); border-radius: 8px; }
+.canais-envio li.pronto { border-color: var(--ok); box-shadow: inset 4px 0 0 var(--ok); }
+.canais-envio li.falta { border-color: var(--aviso); box-shadow: inset 4px 0 0 var(--aviso); }
+.ce-icone { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--superficie-2); color: var(--primaria); flex: none; }
+.ce-texto { display: flex; flex-direction: column; }
+.ce-texto small { color: var(--texto-2); font-size: 0.85rem; }
+.teste-envio { display: grid; grid-template-columns: minmax(140px, 200px) minmax(200px, 1fr) auto; gap: 12px; align-items: end; }
+.teste-envio .campo { margin: 0; }
+@media (max-width: 640px) { .teste-envio { grid-template-columns: 1fr; } }
+.lista-marcar { border: 0; padding: 0; margin: 0 0 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px 12px; }
+.lista-marcar legend { grid-column: 1 / -1; margin-bottom: 4px; padding: 0; }
+.campo-curto { max-width: 220px; }
+.selo-msg { display: inline-block; font-size: 0.8rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--borda); background: var(--superficie-2); white-space: nowrap; }
+.selo-msg.ENVIADA { border-color: var(--ok); color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--superficie)); }
+.selo-msg.FALHOU { border-color: var(--critico); color: var(--critico); background: color-mix(in srgb, var(--critico) 10%, var(--superficie)); }
+.selo-msg.SEM_PROVEDOR, .selo-msg.PENDENTE { border-color: var(--aviso); color: var(--aviso); }
+.erro-msg { max-width: 280px; overflow-wrap: anywhere; }
+.avisos-demanda { list-style: none; padding: 0; display: grid; gap: 6px; font-size: 0.9rem; }

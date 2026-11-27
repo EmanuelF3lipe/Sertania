@@ -7,7 +7,8 @@ function carregarEnv(): void {
   if (!fs.existsSync(arquivo)) return;
   for (const linha of fs.readFileSync(arquivo, 'utf8').split(/\r?\n/)) {
     const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(linha);
-    if (m && m[1] && process.env[m[1]] === undefined) process.env[m[1]] = m[2] ?? '';
+    // comentario no fim da linha ("VALOR   # explicacao") nao faz parte do valor
+    if (m && m[1] && process.env[m[1]] === undefined) process.env[m[1]] = (m[2] ?? '').replace(/\s+#.*$/, '').trim();
   }
 }
 carregarEnv();
